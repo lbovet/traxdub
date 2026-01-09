@@ -51,7 +51,7 @@ Contributions are welcome! Please read the Copilot instructions in `.github/copi
 
 ## License
 
-GNU General Public License v3
+GNU Affero General Public License v3
 
 ## Acknowledgments
 
