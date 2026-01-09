@@ -68,23 +68,28 @@ impl Engine {
     fn start_ingen(&mut self) -> Result<()> {
         info!("Starting Ingen process...");
 
-        // Note: In a real implementation, you would start Ingen with appropriate parameters
-        // For now, this is a placeholder that demonstrates the approach
-        // 
-        // Example command:
-        // ingen -e -g /path/to/graph.ingen
-        //
-        // For this scaffold, we'll just log that we would start it
-        info!("Ingen would be started here (placeholder)");
+        use std::process::{Command, Stdio};
+        use std::thread;
+        use std::time::Duration;
 
-        // In production:
-        // let child = Command::new("ingen")
-        //     .arg("-e")  // Engine mode
-        //     .stdin(Stdio::null())
-        //     .stdout(Stdio::piped())
-        //     .stderr(Stdio::piped())
-        //     .spawn()?;
-        // self.ingen_process = Some(child);
+        let child = Command::new("ingen")
+            .arg("-e")  // Engine mode
+            .arg("-S")  // Socket path
+            .arg("/tmp/ingen-traxdub.sock")
+            .arg("-n")  // Client name
+            .arg("TraxDub Engine")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| anyhow!("Failed to start ingen process: {}. Make sure ingen is installed.", e))?;
+
+        info!("Ingen process started (PID: {:?})", child.id());
+        self.ingen_process = Some(child);
+
+        // Give Ingen time to initialize and create the socket
+        info!("Waiting for Ingen to initialize...");
+        thread::sleep(Duration::from_millis(500));
 
         Ok(())
     }

@@ -1,7 +1,8 @@
 use anyhow::{anyhow, Result};
 use jack::{Client, ClientOptions, ClosureProcessHandler, Control, MidiIn, ProcessScope};
 use log::{debug, error, info, warn};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 /// MIDI event types (excluding note events as per requirements)
 #[derive(Debug, Clone)]
@@ -111,26 +112,30 @@ impl MidiEvent {
 }
 
 /// MIDI receiver that connects to JACK and processes incoming MIDI events
-pub struct MidiReceiver;
+pub struct MidiReceiver {
+    _active_client_handle: Arc<AtomicBool>,
+}
 
 impl MidiReceiver {
     /// Start receiving MIDI events from JACK and return the receiver channel
-    pub fn start() -> Result<Receiver<MidiEvent>> {
+    pub fn start() -> Result<(Self, Receiver<MidiEvent>)> {
         info!("Initializing JACK MIDI client...");
 
         let (event_sender, event_receiver) = channel();
+        let shutdown_flag = Arc::new(AtomicBool::new(false));
+        let shutdown_flag_clone = shutdown_flag.clone();
 
         // Spawn a thread to keep the JACK client alive
         std::thread::spawn(move || {
             // Create JACK client
-            let (client, _status) = Client::new("traxdub", ClientOptions::NO_START_SERVER)
+            let (client, _status) = Client::new("TraxDub Controller", ClientOptions::NO_START_SERVER)
                 .expect("Failed to create JACK client");
 
             info!("JACK client created: {}", client.name());
 
             // Create MIDI input port
             let midi_in = client
-                .register_port("midi_in", MidiIn::default())
+                .register_port("control", MidiIn::default())
                 .expect("Failed to register MIDI input port");
 
             // Set up process callback
@@ -161,18 +166,30 @@ impl MidiReceiver {
                 .expect("Failed to activate JACK client");
 
             info!("JACK client activated and receiving MIDI events");
-            info!("Connect your MIDI controller to 'traxdub:midi_in' using qjackctl or jack_connect");
+            info!("Connect your MIDI controller to 'TraxDub:control' using qjackctl or jack_connect");
 
             // Keep the thread alive to maintain the JACK connection
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(1));
+            while !shutdown_flag_clone.load(Ordering::SeqCst) {
+                std::thread::sleep(std::time::Duration::from_millis(100));
             }
+            
+            info!("Closing JACK MIDI client");
+            drop(active_client);
         });
 
         // Give the thread a moment to start
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        Ok(event_receiver)
+        Ok((Self { _active_client_handle: shutdown_flag }, event_receiver))
+    }
+}
+
+impl Drop for MidiReceiver {
+    fn drop(&mut self) {
+        info!("Dropping MIDI receiver, signaling JACK client shutdown");
+        self._active_client_handle.store(true, Ordering::SeqCst);
+        // Give the thread time to cleanup
+        std::thread::sleep(std::time::Duration::from_millis(200));
     }
 }
 

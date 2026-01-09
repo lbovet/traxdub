@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
 /// Base MIDI control assignments
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -213,22 +215,26 @@ impl Controller {
         self.ui.signal_state_change(state)
     }
     
-    /// Main run loop
-    pub fn run(&mut self) -> Result<()> {
+    /// Run loop with signal handling for graceful shutdown
+    pub fn run_until_signal(&mut self, running: Arc<AtomicBool>) -> Result<()> {
         info!("Controller running in state: {:?}", self.state);
         
         // Start MIDI receiver and get the event channel
         info!("Starting MIDI event loop...");
-        let event_receiver = midi::MidiReceiver::start()?;
+        let (_midi_receiver, event_receiver) = midi::MidiReceiver::start()?;
         
-        // Process events from the receiver
-        loop {
-            match event_receiver.recv() {
+        // Process events from the receiver until signal
+        while running.load(Ordering::SeqCst) {
+            match event_receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => {
                     debug!("Received MIDI event: {:?}", event);
                     if let Err(e) = self.process_midi_event(event) {
                         warn!("Error processing MIDI event: {}", e);
                     }
+                }
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    // No event received, continue loop to check signal
+                    continue;
                 }
                 Err(e) => {
                     error!("Event receiver error: {}", e);
@@ -237,6 +243,9 @@ impl Controller {
             }
         }
         
+        info!("Controller shutting down gracefully");
+        drop(_midi_receiver);
+        info!("MIDI receiver dropped");
         Ok(())
     }
 }

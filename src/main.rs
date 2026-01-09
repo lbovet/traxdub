@@ -5,7 +5,7 @@ mod ui;
 use anyhow::Result;
 use clap::Parser;
 use log::info;
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 /// TraxDub - Live music station application
 #[derive(Parser, Debug)]
@@ -26,6 +26,14 @@ fn main() -> Result<()> {
     
     info!("Starting TraxDub...");
     
+    // Set up Ctrl-C handler
+    let running = Arc::new(AtomicBool::new(true));
+    let r = running.clone();
+    ctrlc::set_handler(move || {
+        info!("Received Ctrl-C, shutting down...");
+        r.store(false, Ordering::SeqCst);
+    })?;
+    
     // Initialize modules
     let ui = Arc::new(ui::UI::new());
     let engine = Arc::new(engine::Engine::new()?);
@@ -33,8 +41,12 @@ fn main() -> Result<()> {
     
     info!("TraxDub initialized successfully");
     
-    // Run the controller
-    controller.run()?;
+    // Run the controller with graceful shutdown
+    let result = controller.run_until_signal(running);
     
-    Ok(())
+    // Explicitly drop engine to ensure clean shutdown
+    info!("Dropping engine...");
+    drop(engine);
+    
+    result
 }
