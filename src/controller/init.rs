@@ -137,10 +137,10 @@ impl Controller {
             // Save configuration
             self.save_config()?;
 
-            // Move to ready state
-            self.state = ControllerState::Ready;
-            self.ui.signal_state_change("Ready")?;
-            info!("Learning complete, controller ready");
+            // Move to navigating state
+            self.state = ControllerState::Navigating;
+            self.ui.signal_state_change("Navigating")?;
+            info!("Learning complete, controller ready for navigation");
         }
 
         Ok(())

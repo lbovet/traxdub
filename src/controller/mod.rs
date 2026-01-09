@@ -33,6 +33,20 @@ pub enum ControlType {
     Button,
 }
 
+/// Navigation level
+#[derive(Debug, Clone, PartialEq)]
+pub enum NavigationLevel {
+    Main,
+    Secondary,
+}
+
+/// Navigation direction
+#[derive(Debug, Clone, PartialEq)]
+pub enum NavigationDirection {
+    Backward,
+    Forward,
+}
+
 /// Controller state machine states
 #[derive(Debug, Clone, PartialEq)]
 pub enum ControllerState {
@@ -41,8 +55,7 @@ pub enum ControllerState {
     LearningSecondaryKnob,
     LearningSelectionButton,
     LearningBackButton,
-    Ready,
-    Processing,
+    Navigating,
 }
 
 /// Main controller that processes MIDI events and coordinates engine and UI
@@ -106,7 +119,7 @@ impl Controller {
             // Try to load existing config
             info!("Loading existing configuration from {:?}", self.config_path);
             self.load_config()?;
-            self.state = ControllerState::Ready;
+            self.state = ControllerState::Navigating;
         } else {
             info!("No configuration found, entering learning mode");
             self.state = ControllerState::LearningSelectionKnob;
@@ -154,8 +167,8 @@ impl Controller {
             ControllerState::LearningBackButton => {
                 self.learn_back_button(event)?;
             }
-            ControllerState::Ready | ControllerState::Processing => {
-                self.process_event_ready_state(event)?;
+            ControllerState::Navigating => {
+                self.process_event_navigating_state(event)?;
             }
             _ => {
                 warn!("Received MIDI event in unexpected state: {:?}", self.state);
@@ -165,14 +178,32 @@ impl Controller {
         Ok(())
     }
     
-    /// Process events when in ready state
-    fn process_event_ready_state(&mut self, event: midi::MidiEvent) -> Result<()> {
-        // This is where the main event processing logic will go
-        // For now, just log the event
-        debug!("Processing event in ready state: {:?}", event);
-        
-        // Apply rules and state machine logic here
-        // Call engine and UI methods based on the event and current state
+    /// Process events when in navigating state
+    fn process_event_navigating_state(&mut self, event: midi::MidiEvent) -> Result<()> {
+        if let midi::MidiEvent::ControlChange { channel, control, value } = event {
+            if let Some(config) = &self.base_control_config {
+                // Check if it's the main knob
+                if config.main_knob.channel == channel && config.main_knob.control == control {
+                    let direction = if value >= 64 {
+                        NavigationDirection::Forward
+                    } else {
+                        NavigationDirection::Backward
+                    };
+                    debug!("Main knob navigation: {:?}, value: {}", direction, value);
+                    self.ui.navigate(NavigationLevel::Main, direction)?;
+                }
+                // Check if it's the secondary knob
+                else if config.secondary_knob.channel == channel && config.secondary_knob.control == control {
+                    let direction = if value >= 64 {
+                        NavigationDirection::Forward
+                    } else {
+                        NavigationDirection::Backward
+                    };
+                    debug!("Secondary knob navigation: {:?}, value: {}", direction, value);
+                    self.ui.navigate(NavigationLevel::Secondary, direction)?;
+                }
+            }
+        }
         
         Ok(())
     }

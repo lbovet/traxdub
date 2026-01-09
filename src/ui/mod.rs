@@ -1,6 +1,8 @@
 use anyhow::Result;
 use log::info;
 
+use crate::controller::{NavigationLevel, NavigationDirection};
+
 /// UI module - Phase 1: Console-based interface
 pub struct UI {}
 
@@ -32,6 +34,20 @@ impl UI {
     /// Signal a state change
     pub fn signal_state_change(&self, state: &str) -> Result<()> {
         println!("[UI] State changed: {}", state);
+        Ok(())
+    }
+
+    /// Handle navigation event
+    pub fn navigate(&self, level: NavigationLevel, direction: NavigationDirection) -> Result<()> {
+        let level_str = match level {
+            NavigationLevel::Main => "MAIN",
+            NavigationLevel::Secondary => "SECONDARY",
+        };
+        let direction_str = match direction {
+            NavigationDirection::Forward => "FORWARD",
+            NavigationDirection::Backward => "BACKWARD",
+        };
+        println!("[UI] Navigation: {} {}", level_str, direction_str);
         Ok(())
     }
 
