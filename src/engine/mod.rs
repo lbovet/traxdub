@@ -5,6 +5,7 @@ use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::os::unix::net::UnixStream;
+use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 
@@ -27,7 +28,7 @@ pub enum PortDirection {
 /// Engine module that encapsulates an Ingen instance
 pub struct Engine {
     ingen_process: Option<std::process::Child>,
-    socket: Option<UnixStream>,
+    socket: Mutex<Option<UnixStream>>,
 }
 
 impl Engine {
@@ -40,7 +41,7 @@ impl Engine {
 
         let mut engine = Self {
             ingen_process: None,
-            socket: None,
+            socket: Mutex::new(None),
         };
 
         // Start Ingen in the background (unless using external)
@@ -52,13 +53,6 @@ impl Engine {
         
         // Connect to Ingen socket
         engine.connect_socket()?;
-
-        // Create default ports
-        let audio_in = engine.create_input_port("audio_in_1", PortType::Audio)?;    
-
-        let audio_out = engine.create_output_port("audio_out_1", PortType::Audio)?;    
-
-        engine.connect(&audio_in, &audio_out)?;
 
         // Discover available plugins
         //engine.discover_plugins()?;
@@ -110,7 +104,7 @@ impl Engine {
             match UnixStream::connect(socket_path) {
                 Ok(stream) => {
                     info!("Connected to Ingen socket");
-                    self.socket = Some(stream);
+                    *self.socket.lock().unwrap() = Some(stream);
                     return Ok(());
                 }
                 Err(e) => {
@@ -126,10 +120,11 @@ impl Engine {
     }
     
     /// Send a message to Ingen via the Unix socket
-    fn send_message(&mut self, message: &str) -> Result<()> {
+    fn send_message(&self, message: &str) -> Result<()> {
         debug!("Sending message to Ingen: {}", message);
         
-        if let Some(socket) = &mut self.socket {
+        let mut socket_guard = self.socket.lock().unwrap();
+        if let Some(socket) = socket_guard.as_mut() {
             socket.write_all(message.as_bytes())
                 .map_err(|e| anyhow!("Failed to write to Ingen socket: {}", e))?;
             socket.flush()
@@ -147,20 +142,20 @@ impl Engine {
     }
 
     /// Create a new block (plugin instance)
-    pub fn create_block(&mut self, plugin_uri: &str, block_id: &str) -> Result<()> {
+    pub fn create_block(&self, plugin_uri: &str, block_id: &str) -> Result<()> {
         // TODO: Implement
         Ok(())
     }
 
     /// Duplicate a plugin instance
-    pub fn duplicate_block(&mut self, source_block_id: &str, new_block_id: &str) -> Result<()> {
+    pub fn duplicate_block(&self, source_block_id: &str, new_block_id: &str) -> Result<()> {
         // TODO: Implement
         Ok(())
     }
 
     /// Set a control parameter on a block
     pub fn set_control_parameter(
-        &mut self,
+        &self,
         block_id: &str,
         parameter_name: &str,
         value: f32,
@@ -170,7 +165,7 @@ impl Engine {
     }
 
     /// Connect two ports
-    pub fn connect(&mut self, source: &str, destination: &str) -> Result<()> {
+    pub fn connect(&self, source: &str, destination: &str) -> Result<()> {
         info!("Connecting '{}' to '{}'", source, destination);
 
         // Build RDF message using protocol module
@@ -183,7 +178,7 @@ impl Engine {
     }
 
     /// Disconnect two ports
-    pub fn disconnect(&mut self, source: &str, destination: &str) -> Result<()> {
+    pub fn disconnect(&self, source: &str, destination: &str) -> Result<()> {
         info!("Disconnecting '{}' from '{}'", source, destination);
 
         // Build RDF message using protocol module
@@ -196,7 +191,7 @@ impl Engine {
     }
 
     /// Create an input port
-    pub fn create_input_port(&mut self, port_name: &str, port_type: PortType) -> Result<String> {
+    pub fn create_input_port(&self, port_name: &str, port_type: PortType) -> Result<String> {
         info!("Creating {:?} input port '{}'", port_type, port_name);
 
         // Build RDF message using protocol module
@@ -210,7 +205,7 @@ impl Engine {
     }
 
     /// Create an output port
-    pub fn create_output_port(&mut self, port_name: &str, port_type: PortType) -> Result<String> {
+    pub fn create_output_port(&self, port_name: &str, port_type: PortType) -> Result<String> {
         info!("Creating {:?} output port '{}'", port_type, port_name);
 
         // Build RDF message using protocol module

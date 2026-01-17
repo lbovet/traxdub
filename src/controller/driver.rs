@@ -26,7 +26,7 @@ pub struct Sink {
 }
 
 /// Port type filter for JACK ports
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PortType {
     Audio,
     Midi,

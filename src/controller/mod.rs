@@ -1,8 +1,10 @@
 pub mod init;
 pub mod driver;
+pub mod feature;
 
 use crate::engine::Engine;
 use crate::ui::UI;
+use crate::controller::feature::Feature;
 use anyhow::Result;
 use log::{debug, error, warn, trace};
 use serde::{Deserialize, Serialize};
@@ -70,6 +72,7 @@ pub struct Controller {
     force_init: bool,
     main_knob_accumulator: f32,
     secondary_knob_accumulator: f32,
+    input_feature: Option<feature::input::InputFeature>,
 }
 
 impl Controller {
@@ -86,6 +89,7 @@ impl Controller {
             force_init,
             main_knob_accumulator: 0.0,
             secondary_knob_accumulator: 0.0,
+            input_feature: None,
         };
         
         controller.initialize()?;
@@ -93,23 +97,14 @@ impl Controller {
         // Create initial system nodes in UI
         controller.ui.create_node("inputs".to_string(), "Inputs".to_string(), crate::ui::NodeType::System)?;
         controller.ui.create_node("outputs".to_string(), "Outputs".to_string(), crate::ui::NodeType::System)?;
-        controller.ui.create_node("guitar".to_string(), "Guitar".to_string(), crate::ui::NodeType::Normal)?;
-        controller.ui.create_node("mike".to_string(), "Mike".to_string(), crate::ui::NodeType::Normal)?;
-        controller.ui.create_node("reverb".to_string(), "Reverb".to_string(), crate::ui::NodeType::Normal)?;  
-        controller.ui.create_node("main".to_string(), "Main".to_string(), crate::ui::NodeType::Normal)?;        
-        controller.ui.create_link("inputs".to_string(), "guitar".to_string())?;
-        controller.ui.create_link("guitar".to_string(), "main".to_string())?;
-        controller.ui.create_link("inputs".to_string(), "mike".to_string())?;
-        controller.ui.create_link("mike".to_string(), "reverb".to_string())?;
-        controller.ui.create_link("reverb".to_string(), "main".to_string())?;
-        controller.ui.create_link("main".to_string(), "outputs".to_string())?;
+        controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
         
         Ok(controller)
     }
     
     /// Process a MIDI event
     pub fn process_midi_event(&mut self, event: driver::MidiEvent) -> Result<()> {
-        trace!("Processing MIDI event: {:?} in state {:?}", event, self.state);
+        trace!("Processing event: {:?} in state {:?}", event, self.state);
         
         match self.state {
             ControllerState::LearningSelectionKnob => {
@@ -131,7 +126,7 @@ impl Controller {
                 self.process_event_browsing_menu_state(event)?;
             }
             _ => {
-                warn!("Received MIDI event in unexpected state: {:?}", self.state);
+                warn!("Received event in unexpected state: {:?}", self.state);
             }
         }
         
@@ -161,28 +156,16 @@ impl Controller {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element: {:?}", element);
                         
-                        let stack_num = self.ui.menu_stack_size() + 1;
-                        let menu = crate::ui::Menu {
-                            id: format!("example_menu_{}", stack_num),
-                            name: format!("Example Menu {}", stack_num),
-                            options: vec![
-                                crate::ui::MenuOption {
-                                    id: "option1".to_string(),
-                                    name: "Option 1".to_string(),
-                                },
-                                crate::ui::MenuOption {
-                                    id: "option2".to_string(),
-                                    name: "Option 2".to_string(),
-                                },
-                                crate::ui::MenuOption {
-                                    id: "option3".to_string(),
-                                    name: "Option 3".to_string(),
-                                },
-                            ],
-                        };
-                        self.ui.open_menu(menu)?;
-                        self.state = ControllerState::BrowsingMenu;
-
+                        // Only open input feature menu if the selected node is "inputs"
+                        if let crate::ui::Element::Node(ref node_id) = element {
+                            if node_id == "inputs" {
+                                if let Some(ref input_feature) = self.input_feature {
+                                    let menu = input_feature.get_menu();
+                                    self.ui.open_menu(menu)?;
+                                    self.state = ControllerState::BrowsingMenu;
+                                }
+                            }
+                        }
                     }
                 }
                 // Check if it's the back button (button press: value > 0)
@@ -215,44 +198,44 @@ impl Controller {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element in menu: {:?}", element);
                         
-                        // Check if first option was selected
                         if let crate::ui::Element::MenuOption(_, ref option_id) = element {
-                            if option_id == "option1" {
-                                // Open another menu
-                                let stack_num = self.ui.menu_stack_size() + 1;
-                                let submenu = crate::ui::Menu {
-                                    id: format!("example_menu_{}", stack_num),
-                                    name: format!("Example Menu {}", stack_num),
-                                    options: vec![
-                                        crate::ui::MenuOption {
-                                            id: "suboption1".to_string(),
-                                            name: "Sub Option 1".to_string(),
-                                        },
-                                        crate::ui::MenuOption {
-                                            id: "suboption2".to_string(),
-                                            name: "Sub Option 2".to_string(),
-                                        },
-                                        crate::ui::MenuOption {
-                                            id: "suboption3".to_string(),
-                                            name: "Sub Option 3".to_string(),
-                                        },
-                                    ],
-                                };
-                                self.ui.open_menu(submenu)?;
-                                // Stay in BrowsingMenu state
-                                return Ok(());
+                            // Handle menu option through input feature
+                            if let Some(ref mut input_feature) = self.input_feature {
+                                let next_state = input_feature.handle_menu_option(option_id)?;
+                                
+                                match next_state {
+                                    ControllerState::BrowsingMenu => {
+                                        // Open the next menu from the feature
+                                        let menu = input_feature.get_menu();
+                                        self.ui.open_menu(menu)?;
+                                    }
+                                    ControllerState::Navigating => {
+                                        // Close all menus and return to navigating
+                                        self.ui.close_all_menus()?;
+                                        if let Some(ref mut input_feature) = self.input_feature {
+                                            input_feature.reset();
+                                        }
+                                        self.state = ControllerState::Navigating;
+                                    }
+                                    _ => {
+                                        // For other states, just transition
+                                        self.state = next_state;
+                                    }
+                                }
                             }
                         }
-
-                        self.ui.close_all_menus()?;
-                        self.state = ControllerState::Navigating;
-                        // TODO: Handle menu option selection
                     }
                 }
                 // Check if it's the back button (close menu and return to Navigating state)
                 else if config.back_button.channel == channel && config.back_button.control == control && value > 0 {
                     if self.ui.back()? {
-                        self.state = ControllerState::Navigating;
+                        // If no more menus, reset feature and return to Navigating
+                        if self.ui.menu_stack_size() == 0 {
+                            if let Some(ref mut input_feature) = self.input_feature {
+                                input_feature.reset();
+                            }
+                            self.state = ControllerState::Navigating;
+                        }
                     }
                 }
             }
@@ -290,15 +273,22 @@ impl Controller {
         
         // Start MIDI receiver and get the event channel        
         let (driver, event_receiver) = driver::Driver::start()?;
+        let driver = Arc::new(driver);
         
         driver.connect_all_midi_inputs()?;
+        
+        // Initialize input feature with driver and engine
+        self.input_feature = Some(feature::input::InputFeature::new(
+            Arc::clone(&driver),
+            Arc::clone(&self.engine),
+        ));
         
         // Process events from the receiver until signal
         while running.load(Ordering::SeqCst) {
             match event_receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => {
                     if let Err(e) = self.process_midi_event(event) {
-                        warn!("Error processing MIDI event: {}", e);
+                        warn!("Error processing event: {}", e);
                     }
                 }
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
