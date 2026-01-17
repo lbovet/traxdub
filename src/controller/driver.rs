@@ -1,5 +1,5 @@
 use anyhow::{Result};
-use jack::{Client, ClientOptions, ClosureProcessHandler, Control, MidiIn, ProcessScope, Port as JackPort, PortFlags};
+use jack::{Client, ClientOptions, ClosureProcessHandler, Control, MidiIn, ProcessScope, PortFlags};
 use log::{debug, error, info, warn};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex};

@@ -1,7 +1,6 @@
 mod controller;
 mod engine;
 mod ui;
-
 use anyhow::Result;
 use clap::Parser;
 use log::info;
@@ -15,6 +14,10 @@ struct Args {
     /// Force re-initialization of base controls
     #[arg(short, long)]
     init: bool,
+    
+    /// Use external Ingen instance (don't start built-in Ingen process)
+    #[arg(short, long)]
+    external: bool,
 }
 
 fn main() -> Result<()> {
@@ -36,7 +39,7 @@ fn main() -> Result<()> {
     
     // Initialize modules
     let ui = Arc::new(ui::UI::new());
-    let engine = Arc::new(engine::Engine::new()?);
+    let engine = Arc::new(engine::Engine::new(args.external)?);
     let mut controller = controller::Controller::new(ui.clone(), engine.clone(), args.init)?;
     
     info!("TraxDub initialized successfully");

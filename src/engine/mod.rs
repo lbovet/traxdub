@@ -32,7 +32,10 @@ pub struct Engine {
 
 impl Engine {
     /// Create a new engine instance
-    pub fn new() -> Result<Self> {
+    /// 
+    /// # Arguments
+    /// * `use_external` - If true, connect to an external Ingen instance instead of starting a new one
+    pub fn new(use_external: bool) -> Result<Self> {
         info!("Initializing Engine...");
 
         let mut engine = Self {
@@ -40,8 +43,12 @@ impl Engine {
             socket: None,
         };
 
-        // Start Ingen in the background
-        //engine.start_ingen()?;
+        // Start Ingen in the background (unless using external)
+        if !use_external {
+            engine.start_ingen()?;
+        } else {
+            info!("Using external Ingen instance");
+        }
         
         // Connect to Ingen socket
         engine.connect_socket()?;
