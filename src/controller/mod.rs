@@ -72,8 +72,8 @@ pub struct Controller {
     force_init: bool,
     main_knob_accumulator: f32,
     secondary_knob_accumulator: f32,
-    input_feature: Option<feature::input::InputFeature>,
-    output_feature: Option<feature::output::OutputFeature>,
+    input_feature: Option<feature::InputFeature>,
+    output_feature: Option<feature::OutputFeature>,
     current_feature: Option<*mut dyn Feature>,
 }
 
@@ -298,13 +298,13 @@ impl Controller {
         driver.connect_all_midi_inputs()?;
         
         // Initialize input feature with driver and engine
-        self.input_feature = Some(feature::input::InputFeature::new(
+        self.input_feature = Some(feature::new_input_feature(
             Arc::clone(&driver),
             Arc::clone(&self.engine),
         ));
         
         // Initialize output feature with driver and engine
-        self.output_feature = Some(feature::output::OutputFeature::new(
+        self.output_feature = Some(feature::new_output_feature(
             Arc::clone(&driver),
             Arc::clone(&self.engine),
         ));
