@@ -255,14 +255,14 @@ impl UI {
                     if current_idx + 1 < option_count {
                         current_idx + 1
                     } else {
-                        current_idx
+                        0 // Wrap to first option
                     }
                 }
                 KnobDirection::Backward => {
                     if current_idx > 0 {
                         current_idx - 1
                     } else {
-                        current_idx
+                        option_count - 1 // Wrap to last option
                     }
                 }
             };
