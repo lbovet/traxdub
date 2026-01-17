@@ -1,0 +1,206 @@
+use anyhow::{anyhow, Result};
+use log::{debug, info};
+use sophia::api::ns::{Namespace, rdf};
+use sophia::api::{MownStr, prelude::*};
+use sophia::api::serializer::TripleSerializer;
+use sophia::api::source::TripleSource;
+use sophia::api::term::{BnodeId, IriRef, SimpleTerm};
+use sophia::inmem::graph::FastGraph;
+use sophia_turtle::{parser::turtle, serializer::turtle::TurtleSerializer};
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use super::{PortType, PortDirection};
+
+// Define namespaces
+const INGEN_NS: &str = "http://drobilla.net/ns/ingen#";
+const LV2_NS: &str = "http://lv2plug.in/ns/lv2core#";
+const PATCH_NS: &str = "http://lv2plug.in/ns/ext/patch#";
+
+// Global sequence number counter
+static SEQUENCE_NUMBER: AtomicU32 = AtomicU32::new(0);
+// Global blank node ID counter
+static BLANK_NODE_COUNTER: AtomicU32 = AtomicU32::new(1);
+
+/// Ingen protocol message builder and parser using RDF/Turtle
+pub struct IngenProtocol;
+
+impl IngenProtocol {
+    
+    /// Create a blank node with a unique globally incrementing ID
+    fn create_blank_node() -> SimpleTerm<'static> {
+        let id = BLANK_NODE_COUNTER.fetch_add(1, Ordering::SeqCst);
+        SimpleTerm::BlankNode(BnodeId::new(MownStr::from(format!("bt{}", id))).ok().unwrap())
+    }
+    
+    /// Build an RDF graph to create a port
+    pub fn build_create_port(port_name: &str, port_type: &PortType, direction: &PortDirection) -> Result<String> {
+        info!("Building create_port message for '{}'", port_name);
+        
+        let mut graph = FastGraph::new();
+        let lv2 = Namespace::new(LV2_NS)?;
+        let patch = Namespace::new(PATCH_NS)?;
+        
+        let port_path = format!("ingen:/main/{}", port_name);
+        let subject = IriRef::new_unchecked(port_path.as_str());
+                
+        let body_node = Self::create_blank_node();
+                
+        // Build the body (port description)
+        graph.insert(&body_node, &lv2.get("name")?, &SimpleTerm::LiteralDatatype(
+            MownStr::from(port_name),
+            IriRef::new_unchecked("http://www.w3.org/2001/XMLSchema#string".into())
+        ))?;
+        
+        let type_local = match port_type {
+            PortType::Audio => "AudioPort",
+            PortType::Midi => "CVPort", // Ingen uses CV ports for MIDI
+        };
+        graph.insert(&body_node, &rdf::type_, &lv2.get(type_local)?)?;
+        
+        let direction_local = match direction {
+            PortDirection::Input => "InputPort",
+            PortDirection::Output => "OutputPort",
+        };
+        graph.insert(&body_node, &rdf::type_, &lv2.get(direction_local)?)?;
+        
+        let put_node = Self::create_blank_node();
+
+        // Build patch:Put structure
+        graph.insert(&put_node, &rdf::type_, &patch.get("Put")?)?;
+        graph.insert(&put_node, &patch.get("subject")?, &subject)?;
+        graph.insert(&put_node, &patch.get("body")?, &body_node)?;        
+
+        Self::serialize_graph(&graph, &put_node)
+    }
+    
+    /// Build an RDF graph to create a block (plugin instance)
+    pub fn build_create_block(block_id: &str, plugin_uri: &str) -> Result<String> {
+        info!("Building create_block message for '{}' with plugin '{}'", block_id, plugin_uri);
+        
+        let graph = FastGraph::new();
+        let root = Self::create_blank_node();
+
+        // TODO: Implement
+        
+        Self::serialize_graph(&graph, &root)
+    }
+
+    /// Build an RDF graph to connect two ports
+    pub fn build_connect(source: &str, destination: &str) -> Result<String> {
+        info!("Building connect message: '{}' -> '{}'", source, destination);
+        
+        let mut graph = FastGraph::new();
+        let ingen = Namespace::new(INGEN_NS)?;
+        let patch = Namespace::new(PATCH_NS)?;
+        
+        // Create blank nodes for patch:Put structure
+        let arc_node = Self::create_blank_node();
+        let put_node = Self::create_blank_node();
+        
+        // Build the Arc (connection)
+        graph.insert(&arc_node, &rdf::type_, &ingen.get("Arc")?)?;
+        graph.insert(&arc_node, &ingen.get("tail")?, &IriRef::new_unchecked(source))?;
+        graph.insert(&arc_node, &ingen.get("head")?, &IriRef::new_unchecked(destination))?;
+                
+        // Build patch:Put structure
+        graph.insert(&put_node, &rdf::type_, &patch.get("Put")?)?;
+        graph.insert(&put_node, &patch.get("subject")?, &IriRef::new_unchecked("ingen:/main/"))?;
+        graph.insert(&put_node, &patch.get("body")?, &arc_node)?;
+        Self::serialize_graph(&graph, &put_node)
+    }
+
+    /// Build an RDF graph to disconnect two ports
+    pub fn build_disconnect(source: &str, destination: &str) -> Result<String> {
+        info!("Building disconnect message: '{}' -X- '{}'", source, destination);
+        
+        let graph = FastGraph::new();
+        let root = Self::create_blank_node();
+
+        // TODO: Implement
+        
+        Self::serialize_graph(&graph, &root)
+    }
+
+    /// Build an RDF graph to delete a block or port
+    pub fn build_delete(path: &str) -> Result<String> {
+        info!("Building delete message for '{}'", path);
+        
+        let graph = FastGraph::new();
+        let root = Self::create_blank_node();
+
+        // TODO: Implement
+        
+        Self::serialize_graph(&graph, &root)
+    }
+
+    /// Build an RDF graph to set a property/parameter
+    pub fn build_set_property(subject: &str, property: &str, value: &str) -> Result<String> {
+        info!("Building set_property message for '{}'", subject);
+        
+        let graph = FastGraph::new();
+        let root = Self::create_blank_node();
+
+        // TODO: Implement
+        
+        Self::serialize_graph(&graph, &root)
+    }
+
+    /// Parse an RDF response from Ingen
+    pub fn parse_response(turtle_data: &str) -> Result<FastGraph> {
+        debug!("Parsing Ingen response");
+        
+        let graph = turtle::parse_str(turtle_data)
+            .collect_triples()
+            .map_err(|e| anyhow!("Failed to parse Ingen RDF response: {}", e))?;
+        
+        Ok(graph)
+    }
+
+    /// Serialize a graph to Turtle format
+    fn serialize_graph(graph: &FastGraph, root_node: &SimpleTerm) -> Result<String> {
+        // Clone the graph to add sequence number
+        let mut graph_with_seq = graph.clone();
+        
+        // Increment and get the sequence number
+        let seq_num = SEQUENCE_NUMBER.fetch_add(1, Ordering::SeqCst);
+        
+        // Add sequence number to the provided root node
+        let patch = Namespace::new(PATCH_NS)?;
+        
+        // Create the sequence number literal with xsd:int datatype
+        let seq_literal = SimpleTerm::LiteralDatatype(
+            MownStr::from(seq_num.to_string()),
+            IriRef::new_unchecked("http://www.w3.org/2001/XMLSchema#int".into())
+        );
+        
+        graph_with_seq.insert(root_node, &patch.get("sequenceNumber")?, &seq_literal)?;
+        
+        let mut serializer = TurtleSerializer::new_stringifier();
+        
+        let result = serializer.serialize_graph(&graph_with_seq)
+            .map_err(|e| anyhow!("Failed to serialize graph: {}", e))?
+            .to_string();
+        
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_create_port() {       
+        let message = IngenProtocol::build_create_port("audio_out", &PortType::Audio, &PortDirection::Output).unwrap();
+        println!("\nCreate Audio output port message:");
+        println!("{}", message);
+    }
+    
+    #[test]
+    fn test_build_connect() {
+        let message = IngenProtocol::build_connect("ingen:/main/audio_in_1", "ingen:/main/audio_out_1").unwrap();
+        println!("\nConnect ports message:");
+        println!("{}", message);
+    }
+}
+
