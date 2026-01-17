@@ -3,10 +3,9 @@ pub mod driver;
 
 use crate::engine::Engine;
 use crate::ui::UI;
-use anyhow::{Context, Result};
-use log::{debug, error, info, warn, trace};
+use anyhow::Result;
+use log::{debug, error, warn, trace};
 use serde::{Deserialize, Serialize};
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -90,70 +89,6 @@ impl Controller {
         
         controller.initialize()?;
         Ok(controller)
-    }
-    
-    /// Get the configuration file path
-    fn get_config_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-        let mut path = PathBuf::from(home);
-        path.push(".traxdub");
-        
-        // Create directory if it doesn't exist
-        if !path.exists() {
-            fs::create_dir_all(&path).ok();
-        }
-        
-        path.push("base-control.json");
-        path
-    }
-    
-    /// Initialize the controller
-    fn initialize(&mut self) -> Result<()> {
-        debug!("Initializing controller...");
-        
-        // Force learning mode if --init flag is set
-        if self.force_init {
-            info!("Force initialization requested, entering learning mode");
-            // Delete existing config if present
-            if self.config_path.exists() {
-                info!("Removing existing configuration file");
-                fs::remove_file(&self.config_path).ok();
-            }
-            self.state = ControllerState::LearningSelectionKnob;
-            self.start_learning_mode()?;
-        } else if self.config_path.exists() {
-            // Try to load existing config
-            info!("Loading existing configuration from {:?}", self.config_path);
-            self.load_config()?;
-            self.state = ControllerState::Navigating;
-        } else {
-            info!("No configuration found, entering learning mode");
-            self.state = ControllerState::LearningSelectionKnob;
-            self.start_learning_mode()?;
-        }
-        
-        Ok(())
-    }
-    
-    /// Load configuration from file
-    fn load_config(&mut self) -> Result<()> {
-        let content = fs::read_to_string(&self.config_path)
-            .context("Failed to read config file")?;
-        let config: BaseControlConfig = serde_json::from_str(&content)
-            .context("Failed to parse config file")?;
-        self.base_control_config = Some(config);
-        Ok(())
-    }
-    
-    /// Save configuration to file
-    fn save_config(&self) -> Result<()> {
-        if let Some(config) = &self.base_control_config {
-            let content = serde_json::to_string_pretty(config)?;
-            fs::write(&self.config_path, content)
-                .context("Failed to write config file")?;
-            info!("Configuration saved to {:?}", self.config_path);
-        }
-        Ok(())
     }
     
     /// Process a MIDI event
