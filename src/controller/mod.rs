@@ -57,6 +57,7 @@ pub enum ControllerState {
     LearningSelectionButton,
     LearningBackButton,
     Navigating,
+    BrowsingMenu,
 }
 
 /// Main controller that processes MIDI events and coordinates engine and UI
@@ -126,6 +127,9 @@ impl Controller {
             ControllerState::Navigating => {
                 self.process_event_navigating_state(event)?;
             }
+            ControllerState::BrowsingMenu => {
+                self.process_event_browsing_menu_state(event)?;
+            }
             _ => {
                 warn!("Received MIDI event in unexpected state: {:?}", self.state);
             }
@@ -156,6 +160,99 @@ impl Controller {
                 else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element: {:?}", element);
+                        
+                        let stack_num = self.ui.menu_stack_size() + 1;
+                        let menu = crate::ui::Menu {
+                            id: format!("example_menu_{}", stack_num),
+                            name: format!("Example Menu {}", stack_num),
+                            options: vec![
+                                crate::ui::MenuOption {
+                                    id: "option1".to_string(),
+                                    name: "Option 1".to_string(),
+                                },
+                                crate::ui::MenuOption {
+                                    id: "option2".to_string(),
+                                    name: "Option 2".to_string(),
+                                },
+                                crate::ui::MenuOption {
+                                    id: "option3".to_string(),
+                                    name: "Option 3".to_string(),
+                                },
+                            ],
+                        };
+                        self.ui.open_menu(menu)?;
+                        self.state = ControllerState::BrowsingMenu;
+
+                    }
+                }
+                // Check if it's the back button (button press: value > 0)
+                else if config.back_button.channel == channel && config.back_button.control == control && value > 0 {
+                    if let Err(e) = self.ui.close_menu() {
+                        debug!("No menu to close: {}", e);
+                    }
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Process events when in browsing menu state
+    fn process_event_browsing_menu_state(&mut self, event: driver::MidiEvent) -> Result<()> {
+        const DELTA_THRESHOLD: f32 = 256.0;
+        
+        if let driver::MidiEvent::ControlChange { channel, control, value } = event {
+            if let Some(config) = &self.base_control_config {
+                // Check if it's the main knob (navigate menu options)
+                if config.main_knob.channel == channel && config.main_knob.control == control {
+                    if let Some(direction) = Self::process_knob_value(value, &mut self.main_knob_accumulator, DELTA_THRESHOLD) {
+                        self.ui.navigate(NavigationLevel::Main, direction)?;
+                    }
+                }
+                // Secondary knob is not used in menu browsing
+                // Check if it's the selection button (select menu option)
+                else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
+                    if let Some(element) = self.ui.select()? {
+                        debug!("Selected element in menu: {:?}", element);
+                        
+                        // Check if first option was selected
+                        if let crate::ui::Element::MenuOption(_, ref option_id) = element {
+                            if option_id == "option1" {
+                                // Open another menu
+                                let stack_num = self.ui.menu_stack_size() + 1;
+                                let submenu = crate::ui::Menu {
+                                    id: format!("example_menu_{}", stack_num),
+                                    name: format!("Example Menu {}", stack_num),
+                                    options: vec![
+                                        crate::ui::MenuOption {
+                                            id: "suboption1".to_string(),
+                                            name: "Sub Option 1".to_string(),
+                                        },
+                                        crate::ui::MenuOption {
+                                            id: "suboption2".to_string(),
+                                            name: "Sub Option 2".to_string(),
+                                        },
+                                        crate::ui::MenuOption {
+                                            id: "suboption3".to_string(),
+                                            name: "Sub Option 3".to_string(),
+                                        },
+                                    ],
+                                };
+                                self.ui.open_menu(submenu)?;
+                                // Stay in BrowsingMenu state
+                                return Ok(());
+                            }
+                        }
+
+                        self.ui.close_all_menus()?;
+                        self.state = ControllerState::Navigating;
+                        // TODO: Handle menu option selection
+                    }
+                }
+                // Check if it's the back button (close menu and return to Navigating state)
+                else if config.back_button.channel == channel && config.back_button.control == control && value > 0 {
+                    if self.ui.back()? {
+                        self.state = ControllerState::Navigating;
                     }
                 }
             }

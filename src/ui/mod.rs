@@ -5,11 +5,27 @@ use std::sync::Mutex;
 
 use crate::controller::{NavigationLevel, KnobDirection};
 
+/// Menu option
+#[derive(Debug, Clone)]
+pub struct MenuOption {
+    pub id: String,
+    pub name: String,
+}
+
+/// Menu
+#[derive(Debug, Clone)]
+pub struct Menu {
+    pub id: String,
+    pub name: String,
+    pub options: Vec<MenuOption>,
+}
+
 /// Focused element type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Element {
     Node(String),
     Link(String, String),
+    MenuOption(String, String), // (menu_id, option_id)
 }
 
 /// Node type
@@ -60,6 +76,8 @@ pub struct UI {
     focused_element: Mutex<Option<Element>>,
     visit_counter: Mutex<i64>,
     order_counter: Mutex<i64>,
+    menu_stack: Mutex<Vec<Menu>>,
+    focused_menu_option: Mutex<Option<usize>>, // Index into current menu's options
 }
 
 impl UI {
@@ -72,6 +90,8 @@ impl UI {
             focused_element: Mutex::new(None),
             visit_counter: Mutex::new(0),
             order_counter: Mutex::new(0),
+            menu_stack: Mutex::new(Vec::new()),
+            focused_menu_option: Mutex::new(None),
         }
     }
 
@@ -216,14 +236,44 @@ impl UI {
         println!("==================\n");
     }
 
-    /// Signal a state change
-    pub fn update_state(&self, state: &str) -> Result<()> {
-        println!("[UI] State changed: {}", state);
-        Ok(())
-    }
-
     /// Handle navigation event
     pub fn navigate(&self, level: NavigationLevel, direction: KnobDirection) -> Result<()> {
+        // Check if we have a menu open - if so, handle menu navigation
+        let menu_stack = self.menu_stack.lock().unwrap();
+        if !menu_stack.is_empty() && level == NavigationLevel::Main {
+            let current_menu = menu_stack.last().unwrap();
+            let option_count = current_menu.options.len();
+            drop(menu_stack);
+            
+            let mut focused_option = self.focused_menu_option.lock().unwrap();
+            let current_idx = focused_option.unwrap_or(0);
+            
+            let new_idx = match direction {
+                KnobDirection::Forward => {
+                    if current_idx + 1 < option_count {
+                        current_idx + 1
+                    } else {
+                        current_idx
+                    }
+                }
+                KnobDirection::Backward => {
+                    if current_idx > 0 {
+                        current_idx - 1
+                    } else {
+                        current_idx
+                    }
+                }
+            };
+            
+            if new_idx != current_idx {
+                *focused_option = Some(new_idx);
+                println!("[UI] Focus moved to menu option: {}", new_idx + 1);
+            }
+            
+            return Ok(());
+        }
+        drop(menu_stack);
+        
         match level {
             NavigationLevel::Main => {
                 let mut focused = self.focused_element.lock().unwrap();
@@ -307,6 +357,10 @@ impl UI {
                             }
                         }
                     }
+                    Some(Element::MenuOption(_, _)) => {
+                        // Menu navigation is handled at the top of the function
+                        // This case should not be reached
+                    }
                     None => {
                         println!("[UI] No element currently focused");
                     }
@@ -364,6 +418,10 @@ impl UI {
                             }
                         }
                     }
+                    Some(Element::MenuOption(_, _)) => {
+                        // Menu navigation is handled at main level
+                        // Secondary navigation is not used for menus
+                    }
                     None => {
                         println!("[UI] No element currently focused");
                     }
@@ -400,6 +458,25 @@ impl UI {
 
     /// Select the currently focused element
     pub fn select(&self) -> Result<Option<Element>> {
+        // If a menu is open, return the focused menu option
+        let menu_stack = self.menu_stack.lock().unwrap();
+        if let Some(current_menu) = menu_stack.last() {
+            let focused_option = self.focused_menu_option.lock().unwrap();
+            if let Some(idx) = *focused_option {
+                if idx < current_menu.options.len() {
+                    let option = &current_menu.options[idx];
+                    println!("[UI] Selected menu option: {}", option.name);
+                    let element = Element::MenuOption(current_menu.id.clone(), option.id.clone());
+                    drop(focused_option);
+                    drop(menu_stack);
+                    self.display_graph();
+                    return Ok(Some(element));
+                }
+            }
+        }
+        drop(menu_stack);
+        
+        // Otherwise, return the focused element
         let focused = self.focused_element.lock().unwrap();
         let element = focused.clone();
         
@@ -411,6 +488,9 @@ impl UI {
                 Element::Link(from_id, to_id) => {
                     println!("[UI] Selected link: {} → {}", from_id, to_id);
                 }
+                Element::MenuOption(menu_id, option_id) => {
+                    println!("[UI] Selected menu option: {} from menu {}", option_id, menu_id);
+                }
             }
         } else {
             println!("[UI] No element focused to select");
@@ -420,6 +500,61 @@ impl UI {
         self.display_graph();
         
         Ok(element)
+    }
+
+    /// Open a menu and push it onto the menu stack
+    pub fn open_menu(&self, menu: Menu) -> Result<()> {
+        debug!("Opening menu: id={}, name={}, options={}", menu.id, menu.name, menu.options.len());
+        
+        // Display the menu
+        println!("\n=== Menu: {} ===", menu.name);
+        for (i, option) in menu.options.iter().enumerate() {
+            let marker = if i == 0 { " [*]" } else { "" };
+            println!("{}.{} {}", i + 1, marker, option.name);
+        }
+        println!("=========================\n");
+        
+        // Focus first option
+        *self.focused_menu_option.lock().unwrap() = Some(0);
+        
+        self.menu_stack.lock().unwrap().push(menu);
+        Ok(())
+    }
+
+    /// Close the top-most menu
+    pub fn close_menu(&self) -> Result<()> {
+        let mut stack = self.menu_stack.lock().unwrap();
+        if let Some(menu) = stack.pop() {
+            debug!("Closed menu: id={}, name={}", menu.id, menu.name);
+            drop(stack);
+            
+            // Clear focused menu option
+            *self.focused_menu_option.lock().unwrap() = None;
+            
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("No menu to close"))
+        }
+    }
+
+    /// Back: Close the top-most menu and return to previous state
+    pub fn back(&self) -> Result<bool> {
+        let _ = self.close_menu();
+        return Ok(self.menu_stack_size() == 0);
+    }
+
+    /// Close all open menus
+    pub fn close_all_menus(&self) -> Result<()> {
+        let mut stack = self.menu_stack.lock().unwrap();
+        let count = stack.len();
+        stack.clear();
+        debug!("Closed all {} menu(s)", count);
+        Ok(())
+    }
+
+    /// Get the current menu stack size
+    pub fn menu_stack_size(&self) -> usize {
+        self.menu_stack.lock().unwrap().len()
     }
 
     /// Prompt user to turn the main selection knob
@@ -464,16 +599,5 @@ impl UI {
 impl Default for UI {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_ui_creation() {
-        let ui = UI::new();
-        assert!(ui.update_state("Test").is_ok());
     }
 }

@@ -204,7 +204,6 @@ impl Controller {
 
             // Move to navigating state
             self.state = ControllerState::Navigating;
-            self.ui.update_state("Navigating")?;
             info!("Learning complete, controller ready for navigation");
         }
 
