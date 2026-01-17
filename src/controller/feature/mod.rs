@@ -1,4 +1,5 @@
 pub mod input;
+pub mod output;
 
 use anyhow::Result;
 use crate::ui::Menu;
@@ -11,7 +12,4 @@ pub trait Feature {
     
     /// Handle menu option selection and return the next controller state
     fn handle_menu_option(&mut self, option_id: &str) -> Result<ControllerState>;
-    
-    /// Reset the feature to its initial state
-    fn reset(&mut self);
 }

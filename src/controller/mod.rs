@@ -50,6 +50,13 @@ pub enum KnobDirection {
     Forward,
 }
 
+/// Active feature being used in menu browsing
+#[derive(Debug, Clone, PartialEq)]
+enum ActiveFeature {
+    Input,
+    Output,
+}
+
 /// Controller state machine states
 #[derive(Debug, Clone, PartialEq)]
 pub enum ControllerState {
@@ -73,6 +80,8 @@ pub struct Controller {
     main_knob_accumulator: f32,
     secondary_knob_accumulator: f32,
     input_feature: Option<feature::input::InputFeature>,
+    output_feature: Option<feature::output::OutputFeature>,
+    current_feature: Option<ActiveFeature>,
 }
 
 impl Controller {
@@ -90,6 +99,8 @@ impl Controller {
             main_knob_accumulator: 0.0,
             secondary_knob_accumulator: 0.0,
             input_feature: None,
+            output_feature: None,
+            current_feature: None,
         };
         
         controller.initialize()?;
@@ -156,12 +167,20 @@ impl Controller {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element: {:?}", element);
                         
-                        // Only open input feature menu if the selected node is "inputs"
+                        
                         if let crate::ui::Element::Node(ref node_id) = element {
                             if node_id == "inputs" {
                                 if let Some(ref input_feature) = self.input_feature {
                                     let menu = input_feature.get_menu();
                                     self.ui.open_menu(menu)?;
+                                    self.current_feature = Some(ActiveFeature::Input);
+                                    self.state = ControllerState::BrowsingMenu;
+                                }
+                            } else if node_id == "outputs" {
+                                if let Some(ref output_feature) = self.output_feature {
+                                    let menu = output_feature.get_menu();
+                                    self.ui.open_menu(menu)?;
+                                    self.current_feature = Some(ActiveFeature::Output);
                                     self.state = ControllerState::BrowsingMenu;
                                 }
                             }
@@ -199,28 +218,51 @@ impl Controller {
                         debug!("Selected element in menu: {:?}", element);
                         
                         if let crate::ui::Element::MenuOption(_, ref option_id) = element {
-                            // Handle menu option through input feature
-                            if let Some(ref mut input_feature) = self.input_feature {
-                                let next_state = input_feature.handle_menu_option(option_id)?;
-                                
-                                match next_state {
-                                    ControllerState::BrowsingMenu => {
-                                        // Open the next menu from the feature
-                                        let menu = input_feature.get_menu();
+                            // Handle menu option through the current active feature
+                            let next_state = match self.current_feature {
+                                Some(ActiveFeature::Input) => {
+                                    if let Some(ref mut input_feature) = self.input_feature {
+                                        input_feature.handle_menu_option(option_id)?
+                                    } else {
+                                        ControllerState::Navigating
+                                    }
+                                }
+                                Some(ActiveFeature::Output) => {
+                                    if let Some(ref mut output_feature) = self.output_feature {
+                                        output_feature.handle_menu_option(option_id)?
+                                    } else {
+                                        ControllerState::Navigating
+                                    }
+                                }
+                                None => ControllerState::Navigating,
+                            };
+                            
+                            match next_state {
+                                ControllerState::BrowsingMenu => {
+                                    // Open the next menu from the current feature
+                                    let menu = match self.current_feature {
+                                        Some(ActiveFeature::Input) => {
+                                            self.input_feature.as_ref().map(|f| f.get_menu())
+                                        }
+                                        Some(ActiveFeature::Output) => {
+                                            self.output_feature.as_ref().map(|f| f.get_menu())
+                                        }
+                                        None => None,
+                                    };
+                                    
+                                    if let Some(menu) = menu {
                                         self.ui.open_menu(menu)?;
                                     }
-                                    ControllerState::Navigating => {
-                                        // Close all menus and return to navigating
-                                        self.ui.close_all_menus()?;
-                                        if let Some(ref mut input_feature) = self.input_feature {
-                                            input_feature.reset();
-                                        }
-                                        self.state = ControllerState::Navigating;
-                                    }
-                                    _ => {
-                                        // For other states, just transition
-                                        self.state = next_state;
-                                    }
+                                }
+                                ControllerState::Navigating => {
+                                    // Close all menus and return to navigating
+                                    self.ui.close_all_menus()?;
+                                    self.current_feature = None;
+                                    self.state = ControllerState::Navigating;
+                                }
+                                _ => {
+                                    // For other states, just transition
+                                    self.state = next_state;
                                 }
                             }
                         }
@@ -229,11 +271,9 @@ impl Controller {
                 // Check if it's the back button (close menu and return to Navigating state)
                 else if config.back_button.channel == channel && config.back_button.control == control && value > 0 {
                     if self.ui.back()? {
-                        // If no more menus, reset feature and return to Navigating
+                        // If no more menus, return to Navigating
                         if self.ui.menu_stack_size() == 0 {
-                            if let Some(ref mut input_feature) = self.input_feature {
-                                input_feature.reset();
-                            }
+                            self.current_feature = None;
                             self.state = ControllerState::Navigating;
                         }
                     }
@@ -279,6 +319,12 @@ impl Controller {
         
         // Initialize input feature with driver and engine
         self.input_feature = Some(feature::input::InputFeature::new(
+            Arc::clone(&driver),
+            Arc::clone(&self.engine),
+        ));
+        
+        // Initialize output feature with driver and engine
+        self.output_feature = Some(feature::output::OutputFeature::new(
             Arc::clone(&driver),
             Arc::clone(&self.engine),
         ));

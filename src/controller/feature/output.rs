@@ -9,29 +9,29 @@ use crate::controller::{ControllerState, feature::Feature};
 use crate::engine::Engine;
 use crate::ui::{Menu, MenuOption};
 
-/// Menu state for the input feature
+/// Menu state for the output feature
 #[derive(Debug, Clone, PartialEq)]
-enum InputMenuState {
+enum OutputMenuState {
     MainMenu,
     PortTypeSelection,
-    SourceList(PortType), // Contains the selected port type
-    PortList(PortType, String), // Contains port type and source name
+    DestinationList(PortType), // Contains the selected port type
+    PortList(PortType, String), // Contains port type and destination name
 }
 
-/// Input feature for managing audio/MIDI inputs
-pub struct InputFeature {
+/// Output feature for managing audio/MIDI outputs
+pub struct OutputFeature {
     driver: Arc<Driver>,
     engine: Arc<Engine>,
-    menu_state: InputMenuState,
+    menu_state: OutputMenuState,
 }
 
-impl InputFeature {
-    /// Create a new input feature
+impl OutputFeature {
+    /// Create a new output feature
     pub fn new(driver: Arc<Driver>, engine: Arc<Engine>) -> Self {
         Self {
             driver,
             engine,
-            menu_state: InputMenuState::MainMenu,
+            menu_state: OutputMenuState::MainMenu,
         }
     }
 
@@ -61,11 +61,11 @@ impl InputFeature {
         result
     }
 
-    /// Get the main menu for input feature
+    /// Get the main menu for output feature
     fn get_main_menu(&self) -> Menu {
         Menu {
-            id: "input_main".to_string(),
-            name: "Input".to_string(),
+            id: "output_main".to_string(),
+            name: "Output".to_string(),
             options: vec![
                 MenuOption {
                     id: "add".to_string(),
@@ -78,7 +78,7 @@ impl InputFeature {
     /// Get the port type selection menu
     fn get_port_type_menu(&self) -> Menu {
         Menu {
-            id: "input_port_type".to_string(),
+            id: "output_port_type".to_string(),
             name: "Select Port Type".to_string(),
             options: vec![
                 MenuOption {
@@ -93,33 +93,33 @@ impl InputFeature {
         }
     }
 
-    /// Get the source selection menu
-    fn get_source_menu(&self, port_type: PortType) -> Result<Menu> {
-        let sources = self.driver.get_sources(port_type)?;
+    /// Get the destination selection menu
+    fn get_destination_menu(&self, port_type: PortType) -> Result<Menu> {
+        let sinks = self.driver.get_sinks(port_type)?;
         
-        let options: Vec<MenuOption> = sources.iter().map(|source| {
+        let options: Vec<MenuOption> = sinks.iter().map(|sink| {
             MenuOption {
-                id: format!("source_{}", source.name),
-                name: source.name.clone(),
+                id: format!("destination_{}", sink.name),
+                name: sink.name.clone(),
             }
         }).collect();
 
         Ok(Menu {
-            id: "input_sources".to_string(),
-            name: "Select Input Source".to_string(),
+            id: "output_destinations".to_string(),
+            name: "Select Output Destination".to_string(),
             options,
         })
     }
 
-    /// Get the port selection menu for a specific source
-    fn get_port_menu(&self, port_type: PortType, source_name: &str) -> Result<Menu> {
-        let sources = self.driver.get_sources(port_type)?;
+    /// Get the port selection menu for a specific destination
+    fn get_port_menu(&self, port_type: PortType, destination_name: &str) -> Result<Menu> {
+        let sinks = self.driver.get_sinks(port_type)?;
         
-        let source = sources.iter()
-            .find(|s| s.name == source_name)
-            .ok_or_else(|| anyhow::anyhow!("Source not found: {}", source_name))?;
+        let sink = sinks.iter()
+            .find(|s| s.name == destination_name)
+            .ok_or_else(|| anyhow::anyhow!("Destination not found: {}", destination_name))?;
 
-        let options: Vec<MenuOption> = source.ports.iter().map(|port| {
+        let options: Vec<MenuOption> = sink.ports.iter().map(|port| {
             MenuOption {
                 id: format!("port_{}", port.name),
                 name: port.short_name.clone(),
@@ -127,27 +127,27 @@ impl InputFeature {
         }).collect();
 
         Ok(Menu {
-            id: format!("input_ports_{}", source_name),
-            name: format!("Ports: {}", source_name),
+            id: format!("output_ports_{}", destination_name),
+            name: format!("Ports: {}", destination_name),
             options,
         })
     }
 }
 
-impl Feature for InputFeature {
+impl Feature for OutputFeature {
     fn get_menu(&self) -> Menu {
         match &self.menu_state {
-            InputMenuState::MainMenu => self.get_main_menu(),
-            InputMenuState::PortTypeSelection => self.get_port_type_menu(),
-            InputMenuState::SourceList(port_type) => {
-                self.get_source_menu(*port_type).unwrap_or_else(|e| {
-                    debug!("Error getting source menu: {}", e);
+            OutputMenuState::MainMenu => self.get_main_menu(),
+            OutputMenuState::PortTypeSelection => self.get_port_type_menu(),
+            OutputMenuState::DestinationList(port_type) => {
+                self.get_destination_menu(*port_type).unwrap_or_else(|e| {
+                    debug!("Error getting destination menu: {}", e);
                     self.get_main_menu()
                 })
             }
-            InputMenuState::PortList(port_type, source_name) => {
-                self.get_port_menu(*port_type, source_name).unwrap_or_else(|e| {
-                    debug!("Error getting port menu for {}: {}", source_name, e);
+            OutputMenuState::PortList(port_type, destination_name) => {
+                self.get_port_menu(*port_type, destination_name).unwrap_or_else(|e| {
+                    debug!("Error getting port menu for {}: {}", destination_name, e);
                     self.get_main_menu()
                 })
             }
@@ -155,50 +155,50 @@ impl Feature for InputFeature {
     }
 
     fn handle_menu_option(&mut self, option_id: &str) -> Result<ControllerState> {
-        debug!("Input feature handling option: {}", option_id);
+        debug!("Output feature handling option: {}", option_id);
 
         match &self.menu_state {
-            InputMenuState::MainMenu => {
+            OutputMenuState::MainMenu => {
                 if option_id == "add" {
                     // Transition to port type selection
-                    self.menu_state = InputMenuState::PortTypeSelection;
+                    self.menu_state = OutputMenuState::PortTypeSelection;
                     Ok(ControllerState::BrowsingMenu)
                 } else {
                     Ok(ControllerState::Navigating)
                 }
             }
-            InputMenuState::PortTypeSelection => {
+            OutputMenuState::PortTypeSelection => {
                 let port_type = match option_id {
                     "type_audio" => PortType::Audio,
                     "type_midi" => PortType::Midi,
                     _ => {
-                        self.menu_state = InputMenuState::MainMenu;
+                        self.menu_state = OutputMenuState::MainMenu;
                         return Ok(ControllerState::Navigating);
                     }
                 };
-                // Transition to source list with selected port type
-                self.menu_state = InputMenuState::SourceList(port_type);
+                // Transition to destination list with selected port type
+                self.menu_state = OutputMenuState::DestinationList(port_type);
                 Ok(ControllerState::BrowsingMenu)
             }
-            InputMenuState::SourceList(port_type) => {
-                if let Some(source_name) = option_id.strip_prefix("source_") {
-                    // Transition to port list for this source
-                    self.menu_state = InputMenuState::PortList(*port_type, source_name.to_string());
+            OutputMenuState::DestinationList(port_type) => {
+                if let Some(destination_name) = option_id.strip_prefix("destination_") {
+                    // Transition to port list for this destination
+                    self.menu_state = OutputMenuState::PortList(*port_type, destination_name.to_string());
                     Ok(ControllerState::BrowsingMenu)
                 } else {
-                    self.menu_state = InputMenuState::MainMenu;
+                    self.menu_state = OutputMenuState::MainMenu;
                     Ok(ControllerState::Navigating)
                 }
             }
-            InputMenuState::PortList(port_type, source_name) => {
+            OutputMenuState::PortList(port_type, destination_name) => {
                 if let Some(port_name) = option_id.strip_prefix("port_") {
-                    debug!("Selected {} port: {} from source: {}", 
+                    debug!("Selected {} port: {} from destination: {}", 
                            match port_type {
                                PortType::Audio => "Audio",
                                PortType::Midi => "MIDI",
                                PortType::All => "All",
                            },
-                           port_name, source_name);
+                           port_name, destination_name);
                     
                     // Sanitize the port name
                     let sanitized_name = Self::sanitize_port_name(port_name);
@@ -211,18 +211,18 @@ impl Feature for InputFeature {
                         PortType::All => crate::engine::PortType::Audio, // Default to Audio if All
                     };
                     
-                    // Create input port in engine
-                    self.engine.create_input_port(&sanitized_name, engine_port_type)?;
+                    // Create output port in engine
+                    self.engine.create_output_port(&sanitized_name, engine_port_type)?;
                     
-                    // Connect the JACK port to the engine port
+                    // Connect the engine port to the JACK port
                     // Retry connection as the engine port is created asynchronously
                     let source_port = crate::controller::driver::Port {
-                        name: port_name.to_string(),
-                        short_name: port_name.split(':').last().unwrap_or(port_name).to_string(),
-                    };
-                    let destination_port = crate::controller::driver::Port {
                         name: format!("TraxDub Engine:{}", sanitized_name),
                         short_name: sanitized_name.clone(),
+                    };
+                    let destination_port = crate::controller::driver::Port {
+                        name: port_name.to_string(),
+                        short_name: port_name.split(':').last().unwrap_or(port_name).to_string(),
                     };
                     
                     let max_duration = Duration::from_millis(1000);
@@ -252,12 +252,12 @@ impl Feature for InputFeature {
                         ));
                     }
                     
-                    debug!("Successfully created and connected input port: {}", sanitized_name);
+                    debug!("Successfully created and connected output port: {}", sanitized_name);
                     
-                    self.menu_state = InputMenuState::MainMenu;
+                    self.menu_state = OutputMenuState::MainMenu;
                     Ok(ControllerState::Navigating)
                 } else {
-                    self.menu_state = InputMenuState::MainMenu;
+                    self.menu_state = OutputMenuState::MainMenu;
                     Ok(ControllerState::Navigating)
                 }
             }

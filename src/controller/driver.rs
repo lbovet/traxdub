@@ -273,7 +273,17 @@ impl Driver {
             }
         }
 
-        Ok(sources_map.into_values().collect())
+        let mut sources: Vec<Source> = sources_map.into_values().collect();
+        
+        // Sort sources alphabetically by name
+        sources.sort_by(|a, b| a.name.cmp(&b.name));
+        
+        // Sort ports within each source alphabetically
+        for source in &mut sources {
+            source.ports.sort_by(|a, b| a.name.cmp(&b.name));
+        }
+
+        Ok(sources)
     }
 
     /// Get all JACK clients that provide output ports (sinks)
@@ -311,7 +321,17 @@ impl Driver {
             }
         }
 
-        Ok(sinks_map.into_values().collect())
+        let mut sinks: Vec<Sink> = sinks_map.into_values().collect();
+        
+        // Sort sinks alphabetically by name
+        sinks.sort_by(|a, b| a.name.cmp(&b.name));
+        
+        // Sort ports within each sink alphabetically
+        for sink in &mut sinks {
+            sink.ports.sort_by(|a, b| a.name.cmp(&b.name));
+        }
+
+        Ok(sinks)
     }
 
     /// Connect two JACK ports
