@@ -92,7 +92,16 @@ impl Controller {
         // Create initial system nodes in UI
         controller.ui.create_node("inputs".to_string(), "Inputs".to_string(), crate::ui::NodeType::System)?;
         controller.ui.create_node("outputs".to_string(), "Outputs".to_string(), crate::ui::NodeType::System)?;
-        controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
+        controller.ui.create_node("guitar".to_string(), "Guitar".to_string(), crate::ui::NodeType::Normal)?;
+        controller.ui.create_node("mike".to_string(), "Mike".to_string(), crate::ui::NodeType::Normal)?;
+        controller.ui.create_node("reverb".to_string(), "Reverb".to_string(), crate::ui::NodeType::Normal)?;  
+        controller.ui.create_node("main".to_string(), "Main".to_string(), crate::ui::NodeType::Normal)?;        
+        controller.ui.create_link("inputs".to_string(), "guitar".to_string())?;
+        controller.ui.create_link("guitar".to_string(), "main".to_string())?;
+        controller.ui.create_link("inputs".to_string(), "mike".to_string())?;
+        controller.ui.create_link("mike".to_string(), "reverb".to_string())?;
+        controller.ui.create_link("reverb".to_string(), "main".to_string())?;
+        controller.ui.create_link("main".to_string(), "outputs".to_string())?;
         
         Ok(controller)
     }
@@ -141,6 +150,12 @@ impl Controller {
                 else if config.secondary_knob.channel == channel && config.secondary_knob.control == control {
                     if let Some(direction) = Self::process_knob_value(value, &mut self.secondary_knob_accumulator, DELTA_THRESHOLD) {
                         self.ui.navigate(NavigationLevel::Secondary, direction)?;
+                    }
+                }
+                // Check if it's the selection button (button press: value > 0)
+                else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
+                    if let Some(element) = self.ui.select()? {
+                        debug!("Selected element: {:?}", element);
                     }
                 }
             }

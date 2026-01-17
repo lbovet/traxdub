@@ -28,10 +28,29 @@ pub struct Node {
 }
 
 /// Link between two nodes
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Link {
     pub from_id: String,
     pub to_id: String,
+    pub visited_last: i64,
+    pub order: i64,
+}
+
+// Implement PartialEq to only compare from_id and to_id (not visited_last or order)
+impl PartialEq for Link {
+    fn eq(&self, other: &Self) -> bool {
+        self.from_id == other.from_id && self.to_id == other.to_id
+    }
+}
+
+impl Eq for Link {}
+
+// Implement Hash to only hash from_id and to_id (not visited_last or order)
+impl std::hash::Hash for Link {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.from_id.hash(state);
+        self.to_id.hash(state);
+    }
 }
 
 /// UI module - Phase 1: Console-based interface
@@ -39,6 +58,8 @@ pub struct UI {
     nodes: Mutex<HashMap<String, Node>>,
     links: Mutex<HashSet<Link>>,
     focused_element: Mutex<Option<Element>>,
+    visit_counter: Mutex<i64>,
+    order_counter: Mutex<i64>,
 }
 
 impl UI {
@@ -49,6 +70,8 @@ impl UI {
             nodes: Mutex::new(HashMap::new()),
             links: Mutex::new(HashSet::new()),
             focused_element: Mutex::new(None),
+            visit_counter: Mutex::new(0),
+            order_counter: Mutex::new(0),
         }
     }
 
@@ -107,7 +130,18 @@ impl UI {
         }
         drop(nodes);
         
-        let link = Link { from_id, to_id };
+        // Get and increment order counter
+        let mut order_counter = self.order_counter.lock().unwrap();
+        *order_counter += 1;
+        let link_order = *order_counter;
+        drop(order_counter);
+        
+        let link = Link { 
+            from_id, 
+            to_id,
+            visited_last: -link_order,
+            order: link_order,
+        };
         self.links.lock().unwrap().insert(link);
         self.display_graph();
         Ok(())
@@ -120,6 +154,8 @@ impl UI {
         let link = Link {
             from_id: from_id.to_string(),
             to_id: to_id.to_string(),
+            visited_last: 0, // Value doesn't matter for lookup since Hash/Eq ignore it
+            order: 0, // Value doesn't matter for lookup since Hash/Eq ignore it
         };
         
         if self.links.lock().unwrap().remove(&link) {
@@ -157,11 +193,12 @@ impl UI {
             
             println!("{}{}", node_id, focus_marker);
             
-            // Find all links FROM this node
-            let from_links: Vec<&Link> = links
+            // Find all links FROM this node and sort by order
+            let mut from_links: Vec<&Link> = links
                 .iter()
                 .filter(|link| &link.from_id == node_id)
                 .collect();
+            from_links.sort_by_key(|link| link.order);
             
             if !from_links.is_empty() {
                 for link in from_links {
@@ -198,21 +235,57 @@ impl UI {
                 match current_focus {
                     Some(Element::Node(current_node_id)) => {
                         // Navigate from a node to a link
+                        // Drop the immutable borrow before getting mutable borrow
+                        drop(links);
+                        let mut links_mut = self.links.lock().unwrap();
+                        
                         match direction {
                             KnobDirection::Forward => {
-                                // Find first link FROM current node
-                                if let Some(link) = links.iter().find(|link| &link.from_id == &current_node_id) {
-                                    trace!("Navigating from node {} to link {} -> {}", current_node_id, link.from_id, link.to_id);
-                                    *focused = Some(Element::Link(link.from_id.clone(), link.to_id.clone()));
-                                    println!("[UI] Focus moved to link: {} → {}", link.from_id, link.to_id);
+                                // Find link FROM current node with highest visited_last
+                                if let Some(link) = links_mut.iter()
+                                    .filter(|link| &link.from_id == &current_node_id)
+                                    .max_by_key(|link| link.visited_last) {
+                                    
+                                    // Update visited_last: remove, update, re-insert
+                                    let mut updated_link = link.clone();
+                                    links_mut.remove(&updated_link);
+                                    
+                                    let mut counter = self.visit_counter.lock().unwrap();
+                                    *counter += 1;
+                                    updated_link.visited_last = *counter;
+                                    drop(counter);
+                                    
+                                    trace!("Navigating from node {} to link {} -> {} (visit={})", 
+                                           current_node_id, updated_link.from_id, updated_link.to_id, updated_link.visited_last);
+                                    
+                                    *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone()));
+                                    println!("[UI] Focus moved to link: {} → {}", updated_link.from_id, updated_link.to_id);
+                                    
+                                    links_mut.insert(updated_link);
                                 }
                             }
                             KnobDirection::Backward => {
-                                // Find first link TO current node
-                                if let Some(link) = links.iter().find(|link| &link.to_id == &current_node_id) {
-                                    trace!("Navigating from node {} to link {} -> {}", current_node_id, link.from_id, link.to_id);
-                                    *focused = Some(Element::Link(link.from_id.clone(), link.to_id.clone()));
-                                    println!("[UI] Focus moved to link: {} → {}", link.from_id, link.to_id);
+                                // Find link TO current node with highest visited_last
+                                if let Some(link) = links_mut.iter()
+                                    .filter(|link| &link.to_id == &current_node_id)
+                                    .max_by_key(|link| link.visited_last) {
+                                    
+                                    // Update visited_last: remove, update, re-insert
+                                    let mut updated_link = link.clone();
+                                    links_mut.remove(&updated_link);
+                                    
+                                    let mut counter = self.visit_counter.lock().unwrap();
+                                    *counter += 1;
+                                    updated_link.visited_last = *counter;
+                                    drop(counter);
+                                    
+                                    trace!("Navigating from node {} to link {} -> {} (visit={})", 
+                                           current_node_id, updated_link.from_id, updated_link.to_id, updated_link.visited_last);
+                                    
+                                    *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone()));
+                                    println!("[UI] Focus moved to link: {} → {}", updated_link.from_id, updated_link.to_id);
+                                    
+                                    links_mut.insert(updated_link);
                                 }
                             }
                         }
@@ -240,14 +313,113 @@ impl UI {
                 }
             }
             NavigationLevel::Secondary => {
-                let direction_str = match direction {
-                    KnobDirection::Forward => "FORWARD",
-                    KnobDirection::Backward => "BACKWARD",
-                };
-                println!("[UI] Navigation: SECONDARY {}", direction_str);
+                let mut focused = self.focused_element.lock().unwrap();
+                let current_focus = focused.clone();
+                
+                match current_focus {
+                    Some(Element::Link(from_id, to_id)) => {
+                        // Navigate between links with the same from_id
+                        let links = self.links.lock().unwrap();
+                        
+                        // Find current link to get its order
+                        if let Some(current_link) = links.iter().find(|l| l.from_id == from_id && l.to_id == to_id) {
+                            let current_order = current_link.order;
+                            
+                            // Get all links with same from_id, excluding current link
+                            let sibling_links: Vec<&Link> = links.iter()
+                                .filter(|l| l.from_id == from_id && !(l.from_id == from_id && l.to_id == to_id))
+                                .collect();
+                            
+                            if let Some(link) = Self::find_sibling_link(&sibling_links, current_order, &direction) {
+                                trace!("Navigating from link {}→{} (order={}) to link {}→{} (order={})",
+                                       from_id, to_id, current_order, link.from_id, link.to_id, link.order);
+                                *focused = Some(Element::Link(link.from_id.clone(), link.to_id.clone()));
+                                println!("[UI] Focus moved to link: {} → {}", link.from_id, link.to_id);
+                            } 
+                        }
+                    }
+                    Some(Element::Node(node_id)) => {
+                        // Navigate from a node: find most recently visited incoming link,
+                        // then find its sibling and focus the node it targets
+                        let links = self.links.lock().unwrap();
+                        
+                        // Find the most recently visited link targeting this node
+                        if let Some(most_recent_link) = links.iter()
+                            .filter(|l| l.to_id == node_id)
+                            .max_by_key(|l| l.visited_last) {
+                            
+                            let current_order = most_recent_link.order;
+                            let from_id = &most_recent_link.from_id;
+                            
+                            // Get all links with same from_id, excluding the most recent one
+                            let sibling_links: Vec<&Link> = links.iter()
+                                .filter(|l| &l.from_id == from_id && !(l.from_id == most_recent_link.from_id && l.to_id == most_recent_link.to_id))
+                                .collect();
+                            
+                            if let Some(sibling_link) = Self::find_sibling_link(&sibling_links, current_order, &direction) {
+                                let target_node = &sibling_link.to_id;
+                                trace!("Navigating from node {} via sibling link to node {}", node_id, target_node);
+                                *focused = Some(Element::Node(target_node.clone()));
+                                println!("[UI] Focus moved to node: {}", target_node);
+                            }
+                        }
+                    }
+                    None => {
+                        println!("[UI] No element currently focused");
+                    }
+                }
             }
         }
         Ok(())
+    }
+
+    /// Find a sibling link based on order and navigation direction
+    /// Returns the link with the closest order in the specified direction
+    fn find_sibling_link<'a>(
+        sibling_links: &[&'a Link],
+        current_order: i64,
+        direction: &KnobDirection,
+    ) -> Option<&'a Link> {
+        match direction {
+            KnobDirection::Forward => {
+                // Find link with smallest order greater than current
+                sibling_links.iter()
+                    .filter(|l| l.order > current_order)
+                    .min_by_key(|l| l.order)
+                    .copied()
+            }
+            KnobDirection::Backward => {
+                // Find link with largest order less than current
+                sibling_links.iter()
+                    .filter(|l| l.order < current_order)
+                    .max_by_key(|l| l.order)
+                    .copied()
+            }
+        }
+    }
+
+    /// Select the currently focused element
+    pub fn select(&self) -> Result<Option<Element>> {
+        let focused = self.focused_element.lock().unwrap();
+        let element = focused.clone();
+        
+        if let Some(ref elem) = element {
+            match elem {
+                Element::Node(id) => {
+                    println!("[UI] Selected node: {}", id);
+                }
+                Element::Link(from_id, to_id) => {
+                    println!("[UI] Selected link: {} → {}", from_id, to_id);
+                }
+            }
+        } else {
+            println!("[UI] No element focused to select");
+        }
+        
+        drop(focused);
+        self.display_graph();
+        
+        Ok(element)
     }
 
     /// Prompt user to turn the main selection knob
