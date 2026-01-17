@@ -11,5 +11,6 @@ pub trait Feature {
     fn get_menu(&self) -> Menu;
     
     /// Handle menu option selection and return the next controller state
-    fn handle_menu_option(&mut self, option_id: &str) -> Result<ControllerState>;
+    /// If option_id is None, the top-most menu was closed and the feature should revert to previous state
+    fn handle_menu_option(&mut self, option_id: Option<&str>) -> Result<ControllerState>;
 }

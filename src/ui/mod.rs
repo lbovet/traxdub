@@ -78,6 +78,7 @@ pub struct UI {
     order_counter: Mutex<i64>,
     menu_stack: Mutex<Vec<Menu>>,
     focused_menu_option: Mutex<Option<usize>>, // Index into current menu's options
+    menu_focus_memory: Mutex<HashMap<String, usize>>, // Remember last focused option for each menu ID
 }
 
 impl UI {
@@ -92,6 +93,7 @@ impl UI {
             order_counter: Mutex::new(0),
             menu_stack: Mutex::new(Vec::new()),
             focused_menu_option: Mutex::new(None),
+            menu_focus_memory: Mutex::new(HashMap::new()),
         }
     }
 
@@ -267,6 +269,17 @@ impl UI {
             
             if new_idx != current_idx {
                 *focused_option = Some(new_idx);
+                drop(focused_option);
+                
+                // Redisplay menu with new focus
+                let menu_stack = self.menu_stack.lock().unwrap();
+                if let Some(current_menu) = menu_stack.last() {
+                    // Save the focused index for this menu
+                    self.menu_focus_memory.lock().unwrap().insert(current_menu.id.clone(), new_idx);
+                    self.display_menu(current_menu, new_idx);
+                }
+                drop(menu_stack);
+                
                 println!("[UI] Focus moved to menu option: {}", new_idx + 1);
             }
             
@@ -502,20 +515,33 @@ impl UI {
         Ok(element)
     }
 
+    /// Display a menu to the console
+    fn display_menu(&self, menu: &Menu, focused_index: usize) {
+        println!("\n=== Menu: {} ===", menu.name);
+        for (i, option) in menu.options.iter().enumerate() {
+            let marker = if i == focused_index { " [*]" } else { "" };
+            println!("{}.{} {}", i + 1, marker, option.name);
+        }
+        println!("=========================\n");
+    }
+
     /// Open a menu and push it onto the menu stack
     pub fn open_menu(&self, menu: Menu) -> Result<()> {
         debug!("Opening menu: id={}, name={}, options={}", menu.id, menu.name, menu.options.len());
         
-        // Display the menu
-        println!("\n=== Menu: {} ===", menu.name);
-        for (i, option) in menu.options.iter().enumerate() {
-            let marker = if i == 0 { " [*]" } else { "" };
-            println!("{}.{} {}", i + 1, marker, option.name);
-        }
-        println!("=========================\n");
+        // Check if we have a remembered focus position for this menu
+        let memory = self.menu_focus_memory.lock().unwrap();
+        let focused_idx = memory.get(&menu.id).copied().unwrap_or(0);
+        drop(memory);
         
-        // Focus first option
-        *self.focused_menu_option.lock().unwrap() = Some(0);
+        // Ensure the focused index is valid for this menu
+        let focused_idx = if focused_idx < menu.options.len() { focused_idx } else { 0 };
+        
+        // Display the menu with remembered focus
+        self.display_menu(&menu, focused_idx);
+        
+        // Set the focused option
+        *self.focused_menu_option.lock().unwrap() = Some(focused_idx);
         
         self.menu_stack.lock().unwrap().push(menu);
         Ok(())
@@ -526,10 +552,32 @@ impl UI {
         let mut stack = self.menu_stack.lock().unwrap();
         if let Some(menu) = stack.pop() {
             debug!("Closed menu: id={}, name={}", menu.id, menu.name);
-            drop(stack);
             
-            // Clear focused menu option
-            *self.focused_menu_option.lock().unwrap() = None;
+            // If there's still a menu in the stack, display it
+            if let Some(current_menu) = stack.last() {
+                let menu_id = current_menu.id.clone();
+                drop(stack);
+                
+                // Restore previously focused option for this menu
+                let memory = self.menu_focus_memory.lock().unwrap();
+                let focused_idx = memory.get(&menu_id).copied().unwrap_or(0);
+                drop(memory);
+                
+                *self.focused_menu_option.lock().unwrap() = Some(focused_idx);
+                
+                // Display the current menu with restored focus
+                let stack = self.menu_stack.lock().unwrap();
+                if let Some(menu) = stack.last() {
+                    // Ensure the focused index is valid for this menu
+                    let focused_idx = if focused_idx < menu.options.len() { focused_idx } else { 0 };
+                    self.display_menu(menu, focused_idx);
+                }
+            } else {
+                drop(stack);
+                
+                // Clear focused menu option when no more menus
+                *self.focused_menu_option.lock().unwrap() = None;
+            }
             
             Ok(())
         } else {

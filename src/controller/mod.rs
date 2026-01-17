@@ -50,13 +50,6 @@ pub enum KnobDirection {
     Forward,
 }
 
-/// Active feature being used in menu browsing
-#[derive(Debug, Clone, PartialEq)]
-enum ActiveFeature {
-    Input,
-    Output,
-}
-
 /// Controller state machine states
 #[derive(Debug, Clone, PartialEq)]
 pub enum ControllerState {
@@ -81,7 +74,7 @@ pub struct Controller {
     secondary_knob_accumulator: f32,
     input_feature: Option<feature::input::InputFeature>,
     output_feature: Option<feature::output::OutputFeature>,
-    current_feature: Option<ActiveFeature>,
+    current_feature: Option<*mut dyn Feature>,
 }
 
 impl Controller {
@@ -111,6 +104,16 @@ impl Controller {
         controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
         
         Ok(controller)
+    }
+    
+    /// Get a reference to the current active feature
+    fn current_feature(&self) -> Option<&dyn Feature> {
+        self.current_feature.map(|ptr| unsafe { &*ptr })
+    }
+    
+    /// Get a mutable reference to the current active feature
+    fn current_feature_mut(&mut self) -> Option<&mut dyn Feature> {
+        self.current_feature.map(|ptr| unsafe { &mut *ptr })
     }
     
     /// Process a MIDI event
@@ -166,23 +169,17 @@ impl Controller {
                 else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element: {:?}", element);
-                        
-                        
+                                               
                         if let crate::ui::Element::Node(ref node_id) = element {
                             if node_id == "inputs" {
-                                if let Some(ref input_feature) = self.input_feature {
-                                    let menu = input_feature.get_menu();
-                                    self.ui.open_menu(menu)?;
-                                    self.current_feature = Some(ActiveFeature::Input);
-                                    self.state = ControllerState::BrowsingMenu;
-                                }
+                                self.current_feature = self.input_feature.as_mut().map(|f| f as *mut dyn Feature);
                             } else if node_id == "outputs" {
-                                if let Some(ref output_feature) = self.output_feature {
-                                    let menu = output_feature.get_menu();
-                                    self.ui.open_menu(menu)?;
-                                    self.current_feature = Some(ActiveFeature::Output);
-                                    self.state = ControllerState::BrowsingMenu;
-                                }
+                                self.current_feature = self.output_feature.as_mut().map(|f| f as *mut dyn Feature);
+                            }
+                            if let Some(feature) = self.current_feature_mut() {
+                                let menu = feature.get_menu();
+                                self.ui.open_menu(menu)?;
+                                self.state = ControllerState::BrowsingMenu;
                             }
                         }
                     }
@@ -219,38 +216,17 @@ impl Controller {
                         
                         if let crate::ui::Element::MenuOption(_, ref option_id) = element {
                             // Handle menu option through the current active feature
-                            let next_state = match self.current_feature {
-                                Some(ActiveFeature::Input) => {
-                                    if let Some(ref mut input_feature) = self.input_feature {
-                                        input_feature.handle_menu_option(option_id)?
-                                    } else {
-                                        ControllerState::Navigating
-                                    }
-                                }
-                                Some(ActiveFeature::Output) => {
-                                    if let Some(ref mut output_feature) = self.output_feature {
-                                        output_feature.handle_menu_option(option_id)?
-                                    } else {
-                                        ControllerState::Navigating
-                                    }
-                                }
-                                None => ControllerState::Navigating,
+                            let next_state = if let Some(feature) = self.current_feature_mut() {
+                                feature.handle_menu_option(Some(option_id))?
+                            } else {
+                                ControllerState::Navigating
                             };
                             
                             match next_state {
                                 ControllerState::BrowsingMenu => {
                                     // Open the next menu from the current feature
-                                    let menu = match self.current_feature {
-                                        Some(ActiveFeature::Input) => {
-                                            self.input_feature.as_ref().map(|f| f.get_menu())
-                                        }
-                                        Some(ActiveFeature::Output) => {
-                                            self.output_feature.as_ref().map(|f| f.get_menu())
-                                        }
-                                        None => None,
-                                    };
-                                    
-                                    if let Some(menu) = menu {
+                                    if let Some(feature) = self.current_feature() {
+                                        let menu = feature.get_menu();
                                         self.ui.open_menu(menu)?;
                                     }
                                 }
@@ -275,6 +251,10 @@ impl Controller {
                         if self.ui.menu_stack_size() == 0 {
                             self.current_feature = None;
                             self.state = ControllerState::Navigating;
+                        }
+                    } else {
+                        if let Some(feature) = self.current_feature_mut() {
+                            feature.handle_menu_option(None)?;
                         }
                     }
                 }

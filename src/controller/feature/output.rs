@@ -154,7 +154,30 @@ impl Feature for OutputFeature {
         }
     }
 
-    fn handle_menu_option(&mut self, option_id: &str) -> Result<ControllerState> {
+    fn handle_menu_option(&mut self, option_id: Option<&str>) -> Result<ControllerState> {
+        // Handle menu closure - revert to previous menu state
+        let Some(option_id) = option_id else {
+            debug!("Output feature: menu closed, reverting to previous state");
+            match &self.menu_state {
+                OutputMenuState::MainMenu => {
+                    // Already at main menu, exit to navigating
+                    return Ok(ControllerState::Navigating);
+                }
+                OutputMenuState::PortTypeSelection => {
+                    self.menu_state = OutputMenuState::MainMenu;
+                    return Ok(ControllerState::BrowsingMenu);
+                }
+                OutputMenuState::DestinationList(_) => {
+                    self.menu_state = OutputMenuState::PortTypeSelection;
+                    return Ok(ControllerState::BrowsingMenu);
+                }
+                OutputMenuState::PortList(port_type, _) => {
+                    self.menu_state = OutputMenuState::DestinationList(*port_type);
+                    return Ok(ControllerState::BrowsingMenu);
+                }
+            }
+        };
+
         debug!("Output feature handling option: {}", option_id);
 
         match &self.menu_state {
