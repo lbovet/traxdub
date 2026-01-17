@@ -88,6 +88,12 @@ impl Controller {
         };
         
         controller.initialize()?;
+        
+        // Create initial system nodes in UI
+        controller.ui.create_node("inputs".to_string(), "Inputs".to_string(), crate::ui::NodeType::System)?;
+        controller.ui.create_node("outputs".to_string(), "Outputs".to_string(), crate::ui::NodeType::System)?;
+        controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
+        
         Ok(controller)
     }
     
@@ -155,9 +161,9 @@ impl Controller {
         
         if accumulator.abs() >= threshold {
             let direction = if *accumulator > 0.0 {
-                KnobDirection::Forward
-            } else {
                 KnobDirection::Backward
+            } else {
+                KnobDirection::Forward
             };
             *accumulator = 0.0;
             Some(direction)
