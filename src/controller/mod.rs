@@ -1,5 +1,5 @@
 pub mod init;
-pub mod midi;
+pub mod driver;
 
 use crate::engine::Engine;
 use crate::ui::UI;
@@ -153,7 +153,7 @@ impl Controller {
     }
     
     /// Process a MIDI event
-    pub fn process_midi_event(&mut self, event: midi::MidiEvent) -> Result<()> {
+    pub fn process_midi_event(&mut self, event: driver::MidiEvent) -> Result<()> {
         debug!("Processing MIDI event: {:?} in state {:?}", event, self.state);
         
         match self.state {
@@ -181,8 +181,8 @@ impl Controller {
     }
     
     /// Process events when in navigating state
-    fn process_event_navigating_state(&mut self, event: midi::MidiEvent) -> Result<()> {
-        if let midi::MidiEvent::ControlChange { channel, control, value } = event {
+    fn process_event_navigating_state(&mut self, event: driver::MidiEvent) -> Result<()> {
+        if let driver::MidiEvent::ControlChange { channel, control, value } = event {
             if let Some(config) = &self.base_control_config {
                 // Check if it's the main knob
                 if config.main_knob.channel == channel && config.main_knob.control == control {
@@ -221,7 +221,9 @@ impl Controller {
         
         // Start MIDI receiver and get the event channel
         info!("Starting MIDI event loop...");
-        let (_midi_receiver, event_receiver) = midi::MidiReceiver::start()?;
+        let (driver, event_receiver) = driver::Driver::start()?;
+        
+        driver.connect_all_midi_inputs()?;
         
         // Process events from the receiver until signal
         while running.load(Ordering::SeqCst) {
@@ -244,7 +246,7 @@ impl Controller {
         }
         
         info!("Controller shutting down gracefully");
-        drop(_midi_receiver);
+        drop(driver);
         info!("MIDI receiver dropped");
         Ok(())
     }

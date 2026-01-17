@@ -1,8 +1,48 @@
-use anyhow::{anyhow, Result};
-use jack::{Client, ClientOptions, ClosureProcessHandler, Control, MidiIn, ProcessScope};
+use anyhow::{Result};
+use jack::{Client, ClientOptions, ClosureProcessHandler, Control, MidiIn, ProcessScope, Port as JackPort, PortFlags};
 use log::{debug, error, info, warn};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+use std::sync::mpsc::{channel, Receiver};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex};
+
+/// Represents a JACK port with its ID and human-friendly name
+#[derive(Debug, Clone)]
+pub struct Port {
+    pub name: String,
+    pub short_name: String,
+}
+
+/// Represents a JACK client that provides input ports (source of audio/MIDI)
+#[derive(Debug, Clone)]
+pub struct Source {
+    pub name: String,
+    pub ports: Vec<Port>,
+}
+
+/// Represents a JACK client that provides output ports (sink for audio/MIDI)
+#[derive(Debug, Clone)]
+pub struct Sink {
+    pub name: String,
+    pub ports: Vec<Port>,
+}
+
+/// Port type filter for JACK ports
+#[derive(Debug, Clone, Copy)]
+pub enum PortType {
+    Audio,
+    Midi,
+    All,
+}
+
+impl PortType {
+    /// Convert to JACK type string filter
+    fn to_jack_type_str(&self) -> Option<&'static str> {
+        match self {
+            PortType::Audio => Some("audio"),
+            PortType::Midi => Some("midi"),
+            PortType::All => None,
+        }
+    }
+}
 
 /// MIDI event types (excluding note events as per requirements)
 #[derive(Debug, Clone)]
@@ -112,11 +152,12 @@ impl MidiEvent {
 }
 
 /// MIDI receiver that connects to JACK and processes incoming MIDI events
-pub struct MidiReceiver {
+pub struct Driver {
     _active_client_handle: Arc<AtomicBool>,
+    client: Arc<Mutex<Option<Client>>>,
 }
 
-impl MidiReceiver {
+impl Driver {
     /// Start receiving MIDI events from JACK and return the receiver channel
     pub fn start() -> Result<(Self, Receiver<MidiEvent>)> {
         info!("Initializing JACK MIDI client...");
@@ -124,6 +165,8 @@ impl MidiReceiver {
         let (event_sender, event_receiver) = channel();
         let shutdown_flag = Arc::new(AtomicBool::new(false));
         let shutdown_flag_clone = shutdown_flag.clone();
+        let client_storage = Arc::new(Mutex::new(None));
+        let client_storage_clone = client_storage.clone();
 
         // Spawn a thread to keep the JACK client alive
         std::thread::spawn(move || {
@@ -160,13 +203,22 @@ impl MidiReceiver {
 
             let process_handler = ClosureProcessHandler::new(process_callback);
 
+            // Store client before activation
+            // Note: We can't store the client after activation since activate_async consumes it
+            // So we'll use a different approach - create a second client for queries
+            
             // Activate the client
             let active_client = client
                 .activate_async((), process_handler)
                 .expect("Failed to activate JACK client");
 
-            info!("JACK client activated and receiving MIDI events");
-            info!("Connect your MIDI controller to 'TraxDub:control' using qjackctl or jack_connect");
+            info!("JACK client activated and receiving MIDI events");            
+
+
+            // Create a separate client for port queries
+            if let Ok((query_client, _)) = Client::new("TraxDub Query", ClientOptions::NO_START_SERVER) {
+                *client_storage_clone.lock().unwrap() = Some(query_client);
+            }
 
             // Keep the thread alive to maintain the JACK connection
             while !shutdown_flag_clone.load(Ordering::SeqCst) {
@@ -180,11 +232,133 @@ impl MidiReceiver {
         // Give the thread a moment to start
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        Ok((Self { _active_client_handle: shutdown_flag }, event_receiver))
+        Ok((Self { 
+            _active_client_handle: shutdown_flag,
+            client: client_storage,
+        }, event_receiver))
+    }
+
+    /// Get all JACK clients that provide input ports (sources)
+    /// 
+    /// # Arguments
+    /// * `port_type` - Filter by port type (Audio, Midi, or All)
+    pub fn get_sources(&self, port_type: PortType) -> Result<Vec<Source>> {
+        let client_guard = self.client.lock().unwrap();
+        let client = client_guard.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("JACK client not initialized"))?;
+
+        let mut sources_map: std::collections::HashMap<String, Source> = std::collections::HashMap::new();
+
+        // Get all ports with output flag (these are sources we can read from)
+        let ports = client.ports(None, port_type.to_jack_type_str(), PortFlags::IS_OUTPUT);
+
+        for port_name in ports {
+            // Parse client name from port name (format: "client_name:port_name")
+            if let Some((client_name, port_short_name)) = port_name.split_once(':') {
+                // Skip TraxDub clients
+                if client_name.starts_with("TraxDub") {
+                    continue;
+                }
+                
+                let entry = sources_map.entry(client_name.to_string())
+                    .or_insert_with(|| Source {
+                        name: client_name.to_string(),
+                        ports: Vec::new(),
+                    });
+
+                entry.ports.push(Port {
+                    name: port_name.to_string(),
+                    short_name: port_short_name.to_string().split(":").last().unwrap_or("").to_string(),
+                });
+            }
+        }
+
+        Ok(sources_map.into_values().collect())
+    }
+
+    /// Get all JACK clients that provide output ports (sinks)
+    /// 
+    /// # Arguments
+    /// * `port_type` - Filter by port type (Audio, Midi, or All)
+    pub fn get_sinks(&self, port_type: PortType) -> Result<Vec<Sink>> {
+        let client_guard = self.client.lock().unwrap();
+        let client = client_guard.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("JACK client not initialized"))?;
+
+        let mut sinks_map: std::collections::HashMap<String, Sink> = std::collections::HashMap::new();
+
+        // Get all ports with input flag (these are sinks we can write to)
+        let ports = client.ports(None, port_type.to_jack_type_str(), PortFlags::IS_INPUT);
+
+        for port_name in ports {
+            // Parse client name from port name (format: "client_name:port_name")
+            if let Some((client_name, port_short_name)) = port_name.split_once(':') {
+                // Skip TraxDub clients
+                if client_name.starts_with("TraxDub") {
+                    continue;
+                }
+                
+                let entry = sinks_map.entry(client_name.to_string())
+                    .or_insert_with(|| Sink {
+                        name: client_name.to_string(),
+                        ports: Vec::new(),
+                    });
+
+                entry.ports.push(Port {
+                    name: port_name.to_string(),
+                    short_name: port_short_name.to_string().split(":").last().unwrap_or("").to_string(),
+                });
+            }
+        }
+
+        Ok(sinks_map.into_values().collect())
+    }
+
+    /// Connect two JACK ports
+    /// 
+    /// # Arguments
+    /// * `source_port` - Reference to the source Port
+    /// * `destination_port` - Reference to the destination Port
+    pub fn connect_ports(&self, source_port: &Port, destination_port: &Port) -> Result<()> {
+        let client_guard = self.client.lock().unwrap();
+        let client = client_guard.as_ref()
+            .ok_or_else(|| anyhow::anyhow!("JACK client not initialized"))?;
+
+        info!("Connecting JACK ports: {} -> {}", source_port.name, destination_port.name);
+        
+        client.connect_ports_by_name(&source_port.name, &destination_port.name)
+            .map_err(|e| anyhow::anyhow!("Failed to connect ports: {:?}", e))?;
+
+        info!("Successfully connected {} to {}", source_port.name, destination_port.name);
+        Ok(())
+    }
+
+    /// Connect all MIDI input sources to the TraxDub Controller MIDI input port
+    pub fn connect_all_midi_inputs(&self) -> Result<()> {
+        info!("Connecting all MIDI input sources to TraxDub Controller");
+        
+        let sources = self.get_sources(PortType::Midi)?;
+        let destination = Port {
+            name: "TraxDub Controller:control".to_string(),
+            short_name: "control".to_string(),
+        };
+
+        let mut connected_count = 0;
+        for source in sources {
+            for port in source.ports {
+                match self.connect_ports(&port, &destination) {
+                    Ok(_) => connected_count += 1,
+                    Err(e) => warn!("Failed to connect {}: {}", port.name, e),
+                }
+            }
+        }
+
+        info!("Connected {} MIDI input port(s) to TraxDub Controller", connected_count);
+        Ok(())
     }
 }
 
-impl Drop for MidiReceiver {
+impl Drop for Driver {
     fn drop(&mut self) {
         info!("Dropping MIDI receiver, signaling JACK client shutdown");
         self._active_client_handle.store(true, Ordering::SeqCst);

@@ -1,5 +1,5 @@
 use super::{BaseControlConfig, ControlType, Controller, ControllerState, MidiAssignment};
-use crate::controller::midi;
+use crate::controller::driver;
 use anyhow::Result;
 use log::{debug, info};
 
@@ -11,8 +11,8 @@ impl Controller {
     }
 
     /// Learn the main knob assignment
-    pub(super) fn learn_main_knob(&mut self, event: midi::MidiEvent) -> Result<()> {
-        if let midi::MidiEvent::ControlChange { channel, control, .. } = event {
+    pub(super) fn learn_main_knob(&mut self, event: driver::MidiEvent) -> Result<()> {
+        if let driver::MidiEvent::ControlChange { channel, control, .. } = event {
             info!("Learned selection knob: channel={}, cc={}", channel, control);
 
             let assignment = MidiAssignment {
@@ -42,8 +42,8 @@ impl Controller {
     }
 
     /// Learn the secondary knob assignment
-    pub(super) fn learn_secondary_knob(&mut self, event: midi::MidiEvent) -> Result<()> {
-        if let midi::MidiEvent::ControlChange { channel, control, .. } = event {
+    pub(super) fn learn_secondary_knob(&mut self, event: driver::MidiEvent) -> Result<()> {
+        if let driver::MidiEvent::ControlChange { channel, control, .. } = event {
             // Ignore if this is the already-learned main knob
             if let Some(config) = &self.base_control_config {
                 if config.main_knob.channel == channel && config.main_knob.control == control {
@@ -74,8 +74,8 @@ impl Controller {
     }
 
     /// Learn the selection button assignment
-    pub(super) fn learn_selection_button(&mut self, event: midi::MidiEvent) -> Result<()> {
-        if let midi::MidiEvent::ControlChange { channel, control, .. } = event {
+    pub(super) fn learn_selection_button(&mut self, event: driver::MidiEvent) -> Result<()> {
+        if let driver::MidiEvent::ControlChange { channel, control, .. } = event {
             // Ignore if this is an already-learned control
             if let Some(config) = &self.base_control_config {
                 if (config.main_knob.channel == channel && config.main_knob.control == control)
@@ -109,8 +109,8 @@ impl Controller {
     }
 
     /// Learn the back button assignment
-    pub(super) fn learn_back_button(&mut self, event: midi::MidiEvent) -> Result<()> {
-        if let midi::MidiEvent::ControlChange { channel, control, .. } = event {
+    pub(super) fn learn_back_button(&mut self, event: driver::MidiEvent) -> Result<()> {
+        if let driver::MidiEvent::ControlChange { channel, control, .. } = event {
             // Ignore if this is an already-learned control
             if let Some(config) = &self.base_control_config {
                 if (config.main_knob.channel == channel && config.main_knob.control == control)
