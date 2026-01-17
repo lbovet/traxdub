@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use log::{debug, info};
+use log::debug;
 use sophia::api::ns::{Namespace, rdf};
 use sophia::api::{MownStr, prelude::*};
 use sophia::api::serializer::TripleSerializer;
@@ -34,7 +34,7 @@ impl IngenProtocol {
     
     /// Build an RDF graph to create a port
     pub fn build_create_port(port_name: &str, port_type: &PortType, direction: &PortDirection) -> Result<String> {
-        info!("Building create_port message for '{}'", port_name);
+        debug!("Building create_port message for '{}'", port_name);
         
         let mut graph = FastGraph::new();
         let lv2 = Namespace::new(LV2_NS)?;
@@ -75,7 +75,7 @@ impl IngenProtocol {
     
     /// Build an RDF graph to create a block (plugin instance)
     pub fn build_create_block(block_id: &str, plugin_uri: &str) -> Result<String> {
-        info!("Building create_block message for '{}' with plugin '{}'", block_id, plugin_uri);
+        debug!("Building create_block message for '{}' with plugin '{}'", block_id, plugin_uri);
         
         let graph = FastGraph::new();
         let root = Self::create_blank_node();
@@ -87,7 +87,7 @@ impl IngenProtocol {
 
     /// Build an RDF graph to connect two ports
     pub fn build_connect(source: &str, destination: &str) -> Result<String> {
-        info!("Building connect message: '{}' -> '{}'", source, destination);
+        debug!("Building connect message: '{}' -> '{}'", source, destination);
         
         let mut graph = FastGraph::new();
         let ingen = Namespace::new(INGEN_NS)?;
@@ -111,7 +111,7 @@ impl IngenProtocol {
 
     /// Build an RDF graph to disconnect two ports
     pub fn build_disconnect(source: &str, destination: &str) -> Result<String> {
-        info!("Building disconnect message: '{}' -X- '{}'", source, destination);
+        debug!("Building disconnect message: '{}' -X- '{}'", source, destination);
         
         let graph = FastGraph::new();
         let root = Self::create_blank_node();
@@ -123,7 +123,7 @@ impl IngenProtocol {
 
     /// Build an RDF graph to delete a block or port
     pub fn build_delete(path: &str) -> Result<String> {
-        info!("Building delete message for '{}'", path);
+        debug!("Building delete message for '{}'", path);
         
         let graph = FastGraph::new();
         let root = Self::create_blank_node();
@@ -135,7 +135,7 @@ impl IngenProtocol {
 
     /// Build an RDF graph to set a property/parameter
     pub fn build_set_property(subject: &str, property: &str, value: &str) -> Result<String> {
-        info!("Building set_property message for '{}'", subject);
+        debug!("Building set_property message for '{}'", subject);
         
         let graph = FastGraph::new();
         let root = Self::create_blank_node();

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use log::info;
+use log::debug;
 
 use crate::controller::{NavigationLevel, NavigationDirection};
 
@@ -9,7 +9,7 @@ pub struct UI {}
 impl UI {
     /// Create a new UI instance
     pub fn new() -> Self {
-        info!("Initializing UI (console mode)...");
+        debug!("Initializing UI (console mode)...");
         Self {}
     }
 

@@ -160,7 +160,7 @@ pub struct Driver {
 impl Driver {
     /// Start receiving MIDI events from JACK and return the receiver channel
     pub fn start() -> Result<(Self, Receiver<MidiEvent>)> {
-        info!("Initializing JACK MIDI client...");
+        debug!("Initializing JACK MIDI client...");
 
         let (event_sender, event_receiver) = channel();
         let shutdown_flag = Arc::new(AtomicBool::new(false));
@@ -174,7 +174,7 @@ impl Driver {
             let (client, _status) = Client::new("TraxDub Controller", ClientOptions::NO_START_SERVER)
                 .expect("Failed to create JACK client");
 
-            info!("JACK client created: {}", client.name());
+            debug!("JACK client created: {}", client.name());
 
             // Create MIDI input port
             let midi_in = client
@@ -212,7 +212,7 @@ impl Driver {
                 .activate_async((), process_handler)
                 .expect("Failed to activate JACK client");
 
-            info!("JACK client activated and receiving MIDI events");            
+            debug!("JACK client activated");            
 
 
             // Create a separate client for port queries
@@ -225,7 +225,7 @@ impl Driver {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
             
-            info!("Closing JACK MIDI client");
+            debug!("Closing JACK MIDI client");
             drop(active_client);
         });
 
@@ -324,18 +324,18 @@ impl Driver {
         let client = client_guard.as_ref()
             .ok_or_else(|| anyhow::anyhow!("JACK client not initialized"))?;
 
-        info!("Connecting JACK ports: {} -> {}", source_port.name, destination_port.name);
+        debug!("Connecting JACK ports: {} -> {}", source_port.name, destination_port.name);
         
         client.connect_ports_by_name(&source_port.name, &destination_port.name)
             .map_err(|e| anyhow::anyhow!("Failed to connect ports: {:?}", e))?;
 
-        info!("Successfully connected {} to {}", source_port.name, destination_port.name);
+        debug!("Successfully connected {} to {}", source_port.name, destination_port.name);
         Ok(())
     }
 
     /// Connect all MIDI input sources to the TraxDub Controller MIDI input port
     pub fn connect_all_midi_inputs(&self) -> Result<()> {
-        info!("Connecting all MIDI input sources to TraxDub Controller");
+        debug!("Connecting all MIDI input sources to TraxDub Controller...");
         
         let sources = self.get_sources(PortType::Midi)?;
         let destination = Port {
@@ -353,14 +353,14 @@ impl Driver {
             }
         }
 
-        info!("Connected {} MIDI input port(s) to TraxDub Controller", connected_count);
+        info!("Listening to {} MIDI input port(s)", connected_count);
         Ok(())
     }
 }
 
 impl Drop for Driver {
     fn drop(&mut self) {
-        info!("Dropping MIDI receiver, signaling JACK client shutdown");
+        debug!("Dropping MIDI receiver, signaling JACK client shutdown");
         self._active_client_handle.store(true, Ordering::SeqCst);
         // Give the thread time to cleanup
         std::thread::sleep(std::time::Duration::from_millis(200));

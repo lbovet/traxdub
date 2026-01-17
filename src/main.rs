@@ -3,7 +3,7 @@ mod engine;
 mod ui;
 use anyhow::Result;
 use clap::Parser;
-use log::info;
+use log::{debug, info};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 
 /// TraxDub - Live music station application
@@ -27,13 +27,13 @@ fn main() -> Result<()> {
     // Parse command-line arguments
     let args = Args::parse();
     
-    info!("Starting TraxDub...");
+    debug!("Starting TraxDub...");
     
     // Set up Ctrl-C handler
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     ctrlc::set_handler(move || {
-        info!("Received Ctrl-C, shutting down...");
+        info!("Received Ctrl-C, shutting down");
         r.store(false, Ordering::SeqCst);
     })?;
     
@@ -42,13 +42,13 @@ fn main() -> Result<()> {
     let engine = Arc::new(engine::Engine::new(args.external)?);
     let mut controller = controller::Controller::new(ui.clone(), engine.clone(), args.init)?;
     
-    info!("TraxDub initialized successfully");
+    debug!("TraxDub initialized successfully");
     
     // Run the controller with graceful shutdown
     let result = controller.run_until_signal(running);
     
     // Explicitly drop engine to ensure clean shutdown
-    info!("Dropping engine...");
+    debug!("Dropping engine...");
     drop(engine);
     
     result

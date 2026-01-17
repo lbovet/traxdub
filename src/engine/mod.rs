@@ -36,7 +36,7 @@ impl Engine {
     /// # Arguments
     /// * `use_external` - If true, connect to an external Ingen instance instead of starting a new one
     pub fn new(use_external: bool) -> Result<Self> {
-        info!("Initializing Engine...");
+        debug!("Initializing Engine...");
 
         let mut engine = Self {
             ingen_process: None,
@@ -90,7 +90,7 @@ impl Engine {
         self.ingen_process = Some(child);
 
         // Give Ingen time to initialize and create the socket
-        info!("Waiting for Ingen to initialize...");
+        debug!("Waiting for Ingen to initialize...");
         thread::sleep(Duration::from_millis(500));
 
         Ok(())
@@ -98,7 +98,7 @@ impl Engine {
 
     /// Connect to the Ingen Unix socket
     fn connect_socket(&mut self) -> Result<()> {
-        info!("Connecting to Ingen socket...");
+        debug!("Connecting to Ingen socket...");
         
         let socket_path = "/tmp/ingen-traxdub.sock";
         
@@ -227,12 +227,22 @@ impl Engine {
 
 impl Drop for Engine {
     fn drop(&mut self) {
-        info!("Shutting down Engine...");
+        debug!("Shutting down Engine...");
         
         // Clean up Ingen process if running
         if let Some(mut process) = self.ingen_process.take() {
-            let _ = process.kill();
-            info!("Ingen process terminated");
+            match process.kill() {
+                Ok(_) => {
+                    // Wait for the process to actually exit
+                    match process.wait() {
+                        Ok(status) => debug!("Ingen process exited with status: {}", status),
+                        Err(e) => eprintln!("Error waiting for Ingen process to exit: {}", e),
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error killing Ingen process: {}", e);
+                }
+            }
         }
     }
 }

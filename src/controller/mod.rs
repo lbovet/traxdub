@@ -105,7 +105,7 @@ impl Controller {
     
     /// Initialize the controller
     fn initialize(&mut self) -> Result<()> {
-        info!("Initializing controller...");
+        debug!("Initializing controller...");
         
         // Force learning mode if --init flag is set
         if self.force_init {
@@ -217,10 +217,9 @@ impl Controller {
     
     /// Run loop with signal handling for graceful shutdown
     pub fn run_until_signal(&mut self, running: Arc<AtomicBool>) -> Result<()> {
-        info!("Controller running in state: {:?}", self.state);
+        debug!("Controller running in state: {:?}", self.state);
         
-        // Start MIDI receiver and get the event channel
-        info!("Starting MIDI event loop...");
+        // Start MIDI receiver and get the event channel        
         let (driver, event_receiver) = driver::Driver::start()?;
         
         driver.connect_all_midi_inputs()?;
@@ -245,9 +244,9 @@ impl Controller {
             }
         }
         
-        info!("Controller shutting down gracefully");
+        debug!("Controller shutting down gracefully");
         drop(driver);
-        info!("MIDI receiver dropped");
+        debug!("MIDI receiver dropped");
         Ok(())
     }
 }
