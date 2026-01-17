@@ -4,7 +4,7 @@ pub mod driver;
 use crate::engine::Engine;
 use crate::ui::UI;
 use anyhow::{Context, Result};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, warn, trace};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -42,9 +42,9 @@ pub enum NavigationLevel {
     Secondary,
 }
 
-/// Navigation direction
+/// Knob direction
 #[derive(Debug, Clone, PartialEq)]
-pub enum NavigationDirection {
+pub enum KnobDirection {
     Backward,
     Forward,
 }
@@ -68,6 +68,8 @@ pub struct Controller {
     base_control_config: Option<BaseControlConfig>,
     config_path: PathBuf,
     force_init: bool,
+    main_knob_accumulator: f32,
+    secondary_knob_accumulator: f32,
 }
 
 impl Controller {
@@ -82,6 +84,8 @@ impl Controller {
             base_control_config: None,
             config_path,
             force_init,
+            main_knob_accumulator: 0.0,
+            secondary_knob_accumulator: 0.0,
         };
         
         controller.initialize()?;
@@ -154,7 +158,7 @@ impl Controller {
     
     /// Process a MIDI event
     pub fn process_midi_event(&mut self, event: driver::MidiEvent) -> Result<()> {
-        debug!("Processing MIDI event: {:?} in state {:?}", event, self.state);
+        trace!("Processing MIDI event: {:?} in state {:?}", event, self.state);
         
         match self.state {
             ControllerState::LearningSelectionKnob => {
@@ -182,27 +186,21 @@ impl Controller {
     
     /// Process events when in navigating state
     fn process_event_navigating_state(&mut self, event: driver::MidiEvent) -> Result<()> {
+        const DELTA_THRESHOLD: f32 = 256.0;
+        
         if let driver::MidiEvent::ControlChange { channel, control, value } = event {
             if let Some(config) = &self.base_control_config {
                 // Check if it's the main knob
                 if config.main_knob.channel == channel && config.main_knob.control == control {
-                    let direction = if value >= 64 {
-                        NavigationDirection::Forward
-                    } else {
-                        NavigationDirection::Backward
-                    };
-                    debug!("Main knob navigation: {:?}, value: {}", direction, value);
-                    self.ui.navigate(NavigationLevel::Main, direction)?;
+                    if let Some(direction) = Self::process_knob_value(value, &mut self.main_knob_accumulator, DELTA_THRESHOLD) {
+                        self.ui.navigate(NavigationLevel::Main, direction)?;
+                    }
                 }
                 // Check if it's the secondary knob
                 else if config.secondary_knob.channel == channel && config.secondary_knob.control == control {
-                    let direction = if value >= 64 {
-                        NavigationDirection::Forward
-                    } else {
-                        NavigationDirection::Backward
-                    };
-                    debug!("Secondary knob navigation: {:?}, value: {}", direction, value);
-                    self.ui.navigate(NavigationLevel::Secondary, direction)?;
+                    if let Some(direction) = Self::process_knob_value(value, &mut self.secondary_knob_accumulator, DELTA_THRESHOLD) {
+                        self.ui.navigate(NavigationLevel::Secondary, direction)?;
+                    }
                 }
             }
         }
@@ -210,9 +208,27 @@ impl Controller {
         Ok(())
     }
     
-    /// Update the UI state
-    pub fn update_ui_state(&self, state: &str) -> Result<()> {
-        self.ui.signal_state_change(state)
+    /// Process knob value and return navigation direction if threshold is reached
+    fn process_knob_value(value: u8, accumulator: &mut f32, threshold: f32) -> Option<KnobDirection> {
+        let delta = if value >= 64 {
+            (value - 64) as f32
+        } else {
+            -((64 - value) as f32)
+        };
+        
+        *accumulator += delta;
+        
+        if accumulator.abs() >= threshold {
+            let direction = if *accumulator > 0.0 {
+                KnobDirection::Forward
+            } else {
+                KnobDirection::Backward
+            };
+            *accumulator = 0.0;
+            Some(direction)
+        } else {
+            None
+        }
     }
     
     /// Run loop with signal handling for graceful shutdown
@@ -228,7 +244,6 @@ impl Controller {
         while running.load(Ordering::SeqCst) {
             match event_receiver.recv_timeout(Duration::from_millis(100)) {
                 Ok(event) => {
-                    debug!("Received MIDI event: {:?}", event);
                     if let Err(e) = self.process_midi_event(event) {
                         warn!("Error processing MIDI event: {}", e);
                     }

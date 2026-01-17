@@ -1,6 +1,6 @@
 use anyhow::{Result};
 use jack::{Client, ClientOptions, ClosureProcessHandler, Control, MidiIn, ProcessScope, PortFlags};
-use log::{debug, error, info, warn};
+use log::{debug, error, info, warn, trace};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}, Mutex};
 
@@ -140,7 +140,7 @@ impl MidiEvent {
             }
             // Note On/Off - explicitly ignored per requirements
             0x80 | 0x90 => {
-                debug!("Ignoring note event");
+                trace!("Ignoring note event");
                 None
             }
             _ => {
@@ -185,16 +185,16 @@ impl Driver {
             let process_callback = move |_: &Client, ps: &ProcessScope| -> Control {
                 // Get MIDI events from the port using iter() method
                 for raw_event in midi_in.iter(ps) {
-                    debug!("Raw MIDI bytes: {:?}", raw_event.bytes);
+                    trace!("Raw MIDI bytes: {:?}", raw_event.bytes);
                     // Parse the MIDI event
                     if let Some(midi_event) = MidiEvent::from_raw(&raw_event.bytes) {
-                        debug!("Parsed MIDI event: {:?}", midi_event);
+                        trace!("Parsed MIDI event: {:?}", midi_event);
                         // Send to channel
                         if let Err(e) = event_sender.send(midi_event) {
                             error!("Failed to send MIDI event: {}", e);
                         }
                     } else {
-                        debug!("Ignored or unknown MIDI event");
+                        trace!("Ignored or unknown MIDI event");
                     }
                 }
 

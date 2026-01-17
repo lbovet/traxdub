@@ -1,7 +1,7 @@
 use anyhow::Result;
 use log::debug;
 
-use crate::controller::{NavigationLevel, NavigationDirection};
+use crate::controller::{NavigationLevel, KnobDirection};
 
 /// UI module - Phase 1: Console-based interface
 pub struct UI {}
@@ -38,14 +38,14 @@ impl UI {
     }
 
     /// Handle navigation event
-    pub fn navigate(&self, level: NavigationLevel, direction: NavigationDirection) -> Result<()> {
+    pub fn navigate(&self, level: NavigationLevel, direction: KnobDirection) -> Result<()> {
         let level_str = match level {
             NavigationLevel::Main => "MAIN",
             NavigationLevel::Secondary => "SECONDARY",
         };
         let direction_str = match direction {
-            NavigationDirection::Forward => "FORWARD",
-            NavigationDirection::Backward => "BACKWARD",
+            KnobDirection::Forward => "FORWARD",
+            KnobDirection::Backward => "BACKWARD",
         };
         println!("[UI] Navigation: {} {}", level_str, direction_str);
         Ok(())
