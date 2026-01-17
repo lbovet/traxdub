@@ -278,9 +278,7 @@ impl UI {
                     self.menu_focus_memory.lock().unwrap().insert(current_menu.id.clone(), new_idx);
                     self.display_menu(current_menu, new_idx);
                 }
-                drop(menu_stack);
-                
-                println!("[UI] Focus moved to menu option: {}", new_idx + 1);
+                drop(menu_stack);                        
             }
             
             return Ok(());
@@ -322,8 +320,7 @@ impl UI {
                                            current_node_id, updated_link.from_id, updated_link.to_id, updated_link.visited_last);
                                     
                                     *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone()));
-                                    println!("[UI] Focus moved to link: {} → {}", updated_link.from_id, updated_link.to_id);
-                                    
+
                                     links_mut.insert(updated_link);
                                 }
                             }
@@ -346,7 +343,6 @@ impl UI {
                                            current_node_id, updated_link.from_id, updated_link.to_id, updated_link.visited_last);
                                     
                                     *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone()));
-                                    println!("[UI] Focus moved to link: {} → {}", updated_link.from_id, updated_link.to_id);
                                     
                                     links_mut.insert(updated_link);
                                 }
@@ -360,13 +356,11 @@ impl UI {
                                 // Move to destination node
                                 trace!("Navigating from link {} -> {} to node {}", from_id, to_id, to_id);
                                 *focused = Some(Element::Node(to_id.clone()));
-                                println!("[UI] Focus moved to node: {}", to_id);
                             }
                             KnobDirection::Backward => {
                                 // Move to source node
                                 trace!("Navigating from link {} -> {} to node {}", from_id, to_id, from_id);
                                 *focused = Some(Element::Node(from_id.clone()));
-                                println!("[UI] Focus moved to node: {}", from_id);
                             }
                         }
                     }
@@ -401,7 +395,6 @@ impl UI {
                                 trace!("Navigating from link {}→{} (order={}) to link {}→{} (order={})",
                                        from_id, to_id, current_order, link.from_id, link.to_id, link.order);
                                 *focused = Some(Element::Link(link.from_id.clone(), link.to_id.clone()));
-                                println!("[UI] Focus moved to link: {} → {}", link.from_id, link.to_id);
                             } 
                         }
                     }
@@ -427,7 +420,6 @@ impl UI {
                                 let target_node = &sibling_link.to_id;
                                 trace!("Navigating from node {} via sibling link to node {}", node_id, target_node);
                                 *focused = Some(Element::Node(target_node.clone()));
-                                println!("[UI] Focus moved to node: {}", target_node);
                             }
                         }
                     }
@@ -441,6 +433,7 @@ impl UI {
                 }
             }
         }
+        self.display_graph();
         Ok(())
     }
 
@@ -575,6 +568,8 @@ impl UI {
             } else {
                 drop(stack);
                 
+                self.display_graph();
+
                 // Clear focused menu option when no more menus
                 *self.focused_menu_option.lock().unwrap() = None;
             }
