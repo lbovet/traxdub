@@ -32,6 +32,9 @@ ctrlc = "3.4"
 sophia = "0.8"
 sophia_turtle = "0.8"
 
+# LV2 plugin host library
+lilv-sys = "0.1"
+
 [dev-dependencies]
 mockall = "0.12"
 

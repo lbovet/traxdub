@@ -1,4 +1,5 @@
 pub mod protocol;
+pub mod lv2;
 
 use anyhow::{anyhow, Result};
 use log::{debug, info, warn, trace};
@@ -25,10 +26,21 @@ pub enum PortDirection {
     Output,
 }
 
+/// Plugin metadata
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Plugin {
+    /// The plugin IRI/URI
+    pub id: String,
+    /// The plugin name
+    pub name: String,
+}
+
 /// Engine module that encapsulates an Ingen instance
 pub struct Engine {
     ingen_process: Option<std::process::Child>,
     socket: Mutex<Option<UnixStream>>,
+    /// List of available LV2 plugins
+    plugins: Vec<Plugin>,
 }
 
 impl Engine {
@@ -42,6 +54,7 @@ impl Engine {
         let mut engine = Self {
             ingen_process: None,
             socket: Mutex::new(None),
+            plugins: Vec::new(),
         };
 
         // Start Ingen in the background (unless using external)
@@ -54,9 +67,21 @@ impl Engine {
         // Connect to Ingen socket
         engine.connect_socket()?;
 
-        // Discover available plugins
-        let plugins = engine.discover_plugins()?;
-        trace!("Available plugins: {:?}", plugins);
+        // Discover available plugins from Ingen
+        let ingen_plugin_iris = engine.discover_plugins()?;
+        
+        // Get full plugin metadata from LV2
+        let lv2_world = lv2::Lv2World::new()?;
+        let all_lv2_plugins = lv2_world.list_plugins();
+        
+        // Filter to keep only plugins that Ingen knows about
+        engine.plugins = all_lv2_plugins.into_iter()
+            .filter(|plugin| ingen_plugin_iris.contains(&plugin.id))
+            .collect();
+        
+        info!("Found {} plugins", engine.plugins.len());        
+
+        trace!("Available plugins: {:?}", engine.plugins);
 
         Ok(engine)
     }
@@ -176,16 +201,21 @@ impl Engine {
         }
     }
 
-    /// Discover available LV2 plugins
+    /// Discover available LV2 plugins from Ingen
     fn discover_plugins(&mut self) -> Result<Vec<String>> {
-        debug!("Discovering LV2 plugins...");
+        debug!("Discovering LV2 plugins from Ingen...");
         
         self.send_message(&IngenProtocol::build_get_plugins()?)?;
         let plugins = 
             IngenProtocol::parse_get_plugins(&self.receive_message()?)?;
         
-        info!("Discovered {} plugins", plugins.len());
+        debug!("Ingen reported {} plugins", plugins.len());
         Ok(plugins)
+    }
+
+    /// Get the list of available plugins
+    pub fn list_plugins(&self) -> &[Plugin] {
+        &self.plugins
     }
 
     /// Create a new block (plugin instance)
