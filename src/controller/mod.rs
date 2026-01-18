@@ -75,6 +75,8 @@ pub struct Controller {
     input_feature: Option<feature::InputFeature>,
     output_feature: Option<feature::OutputFeature>,
     current_feature: Option<*mut dyn Feature>,
+    /// The UI element that was selected when opening the current feature
+    current_element: Option<crate::ui::Element>,
 }
 
 impl Controller {
@@ -94,6 +96,7 @@ impl Controller {
             input_feature: None,
             output_feature: None,
             current_feature: None,
+            current_element: None,
         };
         
         controller.initialize()?;
@@ -169,6 +172,9 @@ impl Controller {
                 else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element: {:?}", element);
+                        
+                        // Store the selected element for use by features
+                        self.current_element = Some(element.clone());
                                                
                         if let crate::ui::Element::Link(ref from_id, ref to_id) = element {
                             // Build menu options based on link endpoints
@@ -252,8 +258,9 @@ impl Controller {
                             }
                             
                             // Handle menu option through the current active feature
+                            let current_elem = self.current_element.clone();
                             let next_state = if let Some(feature) = self.current_feature_mut() {
-                                feature.handle_menu_option(Some(option_id))?
+                                feature.handle_menu_option(Some(option_id), current_elem.as_ref())?
                             } else {
                                 ControllerState::Navigating
                             };
@@ -270,6 +277,7 @@ impl Controller {
                                     // Close all menus and return to navigating
                                     self.ui.close_all_menus()?;
                                     self.current_feature = None;
+                                    self.current_element = None;
                                     self.state = ControllerState::Navigating;
                                 }
                                 _ => {
@@ -289,9 +297,11 @@ impl Controller {
                             self.state = ControllerState::Navigating;
                         }
                     } else {
+                        let current_elem = self.current_element.clone();
                         if let Some(feature) = self.current_feature_mut() {
-                            feature.handle_menu_option(None)?;
+                            feature.handle_menu_option(None, current_elem.as_ref())?;
                         }
+                        self.current_element = None;
                     }
                 }
             }

@@ -41,7 +41,7 @@ impl SystemFeature {
             engine,
             ui,
             menu_state: SystemMenuState::PortTypeSelection,
-            direction,
+            direction
         }
     }
 
@@ -216,7 +216,8 @@ impl Feature for SystemFeature {
         }
     }
 
-    fn handle_menu_option(&mut self, option_id: Option<&str>) -> Result<ControllerState> {
+    fn handle_menu_option(&mut self, option_id: Option<&str>, element: Option<&crate::ui::Element>) -> Result<ControllerState> {
+        
         // Handle menu closure - revert to previous menu state
         let Some(option_id) = option_id else {
             debug!("{} feature: menu closed, reverting to previous state", self.direction_name_cap());
@@ -283,14 +284,16 @@ impl Feature for SystemFeature {
                     };
                     
                     // Create port in engine (input or output based on direction)
-                    match self.direction {
+                    let port_path = match self.direction {
                         SystemDirection::Input => {
-                            self.engine.create_input_port(&sanitized_name, engine_port_type)?;
+                            self.engine.create_input_port(&sanitized_name, engine_port_type)?
                         }
                         SystemDirection::Output => {
-                            self.engine.create_output_port(&sanitized_name, engine_port_type)?;
+                            self.engine.create_output_port(&sanitized_name, engine_port_type)?
                         }
-                    }
+                    };
+                    
+                    debug!("Created {} port at path: {}", self.direction_name(), port_path);
                     
                     // Set up JACK ports for connection based on direction
                     let (source_port, destination_port) = match self.direction {
@@ -351,28 +354,33 @@ impl Feature for SystemFeature {
                     }
                     
                     debug!("Successfully created and connected {} port: {}", 
-                           self.direction_name(), sanitized_name);
+                           self.direction_name(), port_path);
                     
-                    // Create UI node for this port
-                    self.ui.create_node(
-                        sanitized_name.clone(),
+                    // Insert node in UI, using link from/to if available
+                    // Avoid chaining multiple input ports or multiple output ports
+                    let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to)) = &element {
+                        match self.direction {
+                            SystemDirection::Input if from == "inputs" => {
+                                // Avoid chaining inputs → input → input
+                                ("inputs".to_string(), "outputs".to_string())
+                            }
+                            SystemDirection::Output if to == "outputs" => {
+                                // Avoid chaining output → output → outputs
+                                ("inputs".to_string(), "outputs".to_string())
+                            }
+                            _ => (from.clone(), to.clone())
+                        }
+                    } else {
+                        ("inputs".to_string(), "outputs".to_string())
+                    };
+                    
+                    self.ui.insert_node(
+                        port_path,
                         port_name.split(':').last().unwrap_or(port_name).to_string(),
-                        NodeType::Normal
+                        NodeType::Normal,
+                        link_from,
+                        link_to,
                     )?;
-                    
-                    // Create links based on direction and remove inputs->outputs link
-                    match self.direction {
-                        SystemDirection::Input => {
-                            // For input: inputs -> port -> outputs
-                            self.ui.create_link("inputs".to_string(), sanitized_name.clone())?;
-                            self.ui.create_link(sanitized_name, "outputs".to_string())?;
-                        }
-                        SystemDirection::Output => {
-                            // For output: inputs -> port -> outputs
-                            self.ui.create_link("inputs".to_string(), sanitized_name.clone())?;
-                            self.ui.create_link(sanitized_name, "outputs".to_string())?;
-                        }
-                    }
                     
                     self.menu_state = SystemMenuState::PortTypeSelection;
                     Ok(ControllerState::Navigating)

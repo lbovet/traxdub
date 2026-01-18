@@ -186,6 +186,34 @@ impl UI {
         Ok(())
     }
 
+    /// Insert a node between two nodes (connected by a link)
+    /// Creates the node and links from link_from to the node and from the node to link_to
+    /// Removes the original link, unless it connects "inputs" to "outputs"
+    pub fn insert_node(
+        &self,
+        node_id: String,
+        node_name: String,
+        node_type: NodeType,
+        link_from: String,
+        link_to: String,
+    ) -> Result<()> {
+        debug!("Inserting node {} between {} and {}", node_id, link_from, link_to);
+        
+        // Create the new node
+        self.create_node(node_id.clone(), node_name, node_type)?;
+        
+        // Create links
+        self.create_link(link_from.clone(), node_id.clone())?;
+        self.create_link(node_id, link_to.clone())?;
+        
+        // Remove the original link, unless it connects inputs to outputs
+        if !(link_from == "inputs" && link_to == "outputs") {
+            self.remove_link(&link_from, &link_to)?;
+        }
+        
+        Ok(())
+    }
+
     /// Remove a link between two nodes
     pub fn remove_link(&self, from_id: &str, to_id: &str) -> Result<()> {
         debug!("Removing link: {} -> {}", from_id, to_id);
