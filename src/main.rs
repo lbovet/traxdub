@@ -42,7 +42,7 @@ fn main() -> Result<()> {
     let engine = Arc::new(engine::Engine::new(args.external)?);
     let mut controller = controller::Controller::new(ui.clone(), engine.clone(), args.init)?;
     
-    debug!("TraxDub initialized successfully");
+    debug!("TraxDub initialized");
     
     // Run the controller with graceful shutdown
     let result = controller.run_until_signal(running);

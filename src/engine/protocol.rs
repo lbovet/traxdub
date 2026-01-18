@@ -145,6 +145,22 @@ impl IngenProtocol {
         Self::serialize_graph(&graph, &root)
     }
 
+    /// Build an RDF graph to query for available plugins
+    pub fn build_get_plugins() -> Result<String> {
+        debug!("Building get_plugins message");
+        
+        let mut graph = FastGraph::new();
+        let patch = Namespace::new(PATCH_NS)?;
+        
+        let get_node = Self::create_blank_node();
+        
+        // Build patch:Get structure to request plugins
+        graph.insert(&get_node, &rdf::type_, &patch.get("Get")?)?;
+        graph.insert(&get_node, &patch.get("subject")?, &IriRef::new_unchecked("ingen:/plugins"))?;
+        
+        Self::serialize_graph(&graph, &get_node)
+    }
+
     /// Parse an RDF response from Ingen
     pub fn parse_response(turtle_data: &str) -> Result<FastGraph> {
         debug!("Parsing Ingen response");
@@ -154,6 +170,65 @@ impl IngenProtocol {
             .map_err(|e| anyhow!("Failed to parse Ingen RDF response: {}", e))?;
         
         Ok(graph)
+    }
+
+    /// Parse plugin list from a get_plugins response
+    pub fn parse_get_plugins(response: &str) -> Result<Vec<String>> {
+        debug!("Parsing plugin list from response");
+        
+        // Parse the response into a graph
+        let graph = Self::parse_response(response)?;
+        
+        let patch = Namespace::new(PATCH_NS)?;
+        let lv2 = Namespace::new(LV2_NS)?;
+        
+        let mut plugins = Vec::new();
+        
+        // Find all patch:Put statements
+        let patch_put = patch.get("Put")?;
+        let patch_subject = patch.get("subject")?;
+        let patch_body = patch.get("body")?;
+        let lv2_plugin = lv2.get("Plugin")?;
+        
+        // Iterate over all triples to find patch:Put nodes
+        for triple in graph.triples() {
+            let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
+            
+            // Check if this is a patch:Put
+            if triple.p() == &rdf::type_ && triple.o() == &patch_put {
+                let put_node = triple.s();
+                
+                // Find the subject and body of this Put
+                let mut subject_uri: Option<String> = None;
+                let mut body_node = None;
+                
+                for t in graph.triples_matching([put_node], [&patch_subject], Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding subject: {}", e))?;
+                    // Extract the IRI value from the object
+                    if let SimpleTerm::Iri(iri) = t.o() {
+                        subject_uri = Some(iri.as_str().to_string());
+                    }
+                }
+                
+                for t in graph.triples_matching([put_node], [&patch_body], Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding body: {}", e))?;
+                    body_node = Some(t.o());
+                }
+                
+                // Check if the body contains lv2:Plugin type
+                if let (Some(uri), Some(body)) = (subject_uri, body_node) {
+                    for t in graph.triples_matching([body], [&rdf::type_], [&lv2_plugin]) {
+                        if t.is_ok() {
+                            plugins.push(uri.clone());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        debug!("Found {} plugins", plugins.len());
+        Ok(plugins)
     }
 
     /// Serialize a graph to Turtle format

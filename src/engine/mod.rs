@@ -1,7 +1,7 @@
 pub mod protocol;
 
 use anyhow::{anyhow, Result};
-use log::{debug, info, warn};
+use log::{debug, info, warn, trace};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::os::unix::net::UnixStream;
@@ -55,14 +55,15 @@ impl Engine {
         engine.connect_socket()?;
 
         // Discover available plugins
-        //engine.discover_plugins()?;
+        let plugins = engine.discover_plugins()?;
+        trace!("Available plugins: {:?}", plugins);
 
         Ok(engine)
     }
 
     /// Start the Ingen process
     fn start_ingen(&mut self) -> Result<()> {
-        info!("Starting Ingen process...");
+        debug!("Starting Ingen process...");
 
         use std::process::{Command, Stdio};
         use std::thread;
@@ -135,10 +136,56 @@ impl Engine {
         }
     }
 
+    /// Receive a message from Ingen via Unix socket
+    fn receive_message(&self) -> Result<String> {
+        use std::io::Read;
+        
+        debug!("Receiving message from Ingen...");
+        
+        let mut socket_guard = self.socket.lock().unwrap();
+        if let Some(socket) = socket_guard.as_mut() {
+            // Set a read timeout
+            socket.set_read_timeout(Some(Duration::from_secs(5)))
+                .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
+            
+            let mut buffer = String::new();
+            let mut temp_buf = [0u8; 4096];
+            
+            loop {
+                match socket.read(&mut temp_buf) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        // Check if null byte is in the received data
+                        if let Some(null_pos) = temp_buf[..n].iter().position(|&b| b == 0) {
+                            // Add data up to (but not including) the null byte
+                            buffer.push_str(&String::from_utf8_lossy(&temp_buf[..null_pos]));
+                            break;
+                        }
+                        buffer.push_str(&String::from_utf8_lossy(&temp_buf[..n]));
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                    Err(e) => return Err(anyhow!("Failed to read from Ingen socket: {}", e)),
+                }
+            }
+            
+            debug!("Received {} bytes from Ingen", buffer.len());
+            trace!("Received buffer content:\n{}", buffer);
+            Ok(buffer)
+        } else {
+            Err(anyhow!("Not connected to Ingen socket"))
+        }
+    }
+
     /// Discover available LV2 plugins
-    fn discover_plugins(&mut self) -> Result<()> {
-        // TODO: Implement
-        Ok(())
+    fn discover_plugins(&mut self) -> Result<Vec<String>> {
+        debug!("Discovering LV2 plugins...");
+        
+        self.send_message(&IngenProtocol::build_get_plugins()?)?;
+        let plugins = 
+            IngenProtocol::parse_get_plugins(&self.receive_message()?)?;
+        
+        info!("Discovered {} plugins", plugins.len());
+        Ok(plugins)
     }
 
     /// Create a new block (plugin instance)
@@ -173,6 +220,7 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
+        self.receive_message()?; // Drain response
 
         Ok(())
     }
@@ -199,6 +247,7 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
+        self.receive_message()?; // Drain response
 
         // Return the port path
         Ok(format!("ingen:/main/{}", port_name))
@@ -213,6 +262,7 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
+        self.receive_message()?; // Drain response
 
         // Return the port path
         Ok(format!("ingen:/main/{}", port_name))
@@ -230,7 +280,7 @@ impl Drop for Engine {
                 Ok(_) => {
                     // Wait for the process to actually exit
                     match process.wait() {
-                        Ok(status) => debug!("Ingen process exited with status: {}", status),
+                        Ok(status) => debug!("Ingen process exited with {}", status),
                         Err(e) => eprintln!("Error waiting for Ingen process to exit: {}", e),
                     }
                 }

@@ -225,7 +225,7 @@ impl Driver {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
             
-            debug!("Closing JACK MIDI client");
+            debug!("JACK client closed");
             drop(active_client);
         });
 
@@ -391,7 +391,7 @@ impl Driver {
 
 impl Drop for Driver {
     fn drop(&mut self) {
-        debug!("Dropping MIDI receiver, signaling JACK client shutdown");
+        debug!("Signaling JACK client shutdown");
         self._active_client_handle.store(true, Ordering::SeqCst);
         // Give the thread time to cleanup
         std::thread::sleep(std::time::Duration::from_millis(200));
