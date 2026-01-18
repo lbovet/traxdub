@@ -26,6 +26,23 @@ pub struct IngenProtocol;
 
 impl IngenProtocol {
     
+    /// Get the initialization message with RDF prefixes
+    pub fn get_init_message() -> &'static str {
+        "@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix ingen: <http://drobilla.net/ns/ingen#> .
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix midi: <http://lv2plug.in/ns/ext/midi#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix patch: <http://lv2plug.in/ns/ext/patch#> .
+@prefix pg: <http://lv2plug.in/ns/ext/port-groups#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rsz: <http://lv2plug.in/ns/ext/resize-port#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+"
+    }
+    
     /// Create a blank node with a unique globally incrementing ID
     fn create_blank_node() -> SimpleTerm<'static> {
         let id = BLANK_NODE_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -189,6 +206,22 @@ impl IngenProtocol {
         Self::serialize_graph(&graph, &get_node)
     }
 
+    /// Build an RDF graph to get the full engine state
+    pub fn build_get_state() -> Result<String> {
+        debug!("Building get_state message");
+        
+        let mut graph = FastGraph::new();
+        let patch = Namespace::new(PATCH_NS)?;
+        
+        let get_node = Self::create_blank_node();
+        
+        // Build patch:Get structure to request engine state
+        graph.insert(&get_node, &rdf::type_, &patch.get("Get")?)?;
+        graph.insert(&get_node, &patch.get("subject")?, &IriRef::new_unchecked("ingen:/main/"))?;
+        
+        Self::serialize_graph(&graph, &get_node)
+    }
+
     /// Parse an RDF response from Ingen
     pub fn parse_response(turtle_data: &str) -> Result<FastGraph> {
         debug!("Parsing Ingen response");
@@ -198,6 +231,54 @@ impl IngenProtocol {
             .map_err(|e| anyhow!("Failed to parse Ingen RDF response: {}", e))?;
         
         Ok(graph)
+    }
+
+    /// Check if the message is only a bundle boundary (contains only ingen:BundleEnd nodes)
+    pub fn is_bundle_boundary(turtle_data: &str) -> bool {
+        debug!("Checking if message is a bundle boundary");
+        
+        // Try to parse the response
+        let graph = match Self::parse_response(turtle_data) {
+            Ok(g) => g,
+            Err(_) => return false,
+        };
+        
+        // Get the ingen:BundleEnd type
+        let ingen = match Namespace::new(INGEN_NS) {
+            Ok(ns) => ns,
+            Err(_) => return false,
+        };
+        
+        let bundle_end = match ingen.get("BundleEnd") {
+            Ok(be) => be,
+            Err(_) => return false,
+        };
+        
+        // Check if there are any triples
+        let mut has_triples = false;
+        let mut all_bundle_end = true;
+        
+        // Iterate over all subjects with rdf:type statements
+        for triple in graph.triples() {
+            let triple = match triple {
+                Ok(t) => t,
+                Err(_) => continue,
+            };
+            
+            has_triples = true;
+            
+            // If this is a type statement
+            if triple.p() == &rdf::type_ {
+                // Check if it's NOT a BundleEnd
+                if triple.o() != &bundle_end {
+                    all_bundle_end = false;
+                    break;
+                }
+            }
+        }
+        
+        // It's a bundle boundary only if it has triples AND all type statements are BundleEnd
+        has_triples && all_bundle_end
     }
 
     /// Parse plugin list from a get_plugins response

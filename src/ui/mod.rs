@@ -79,6 +79,7 @@ pub struct UI {
     menu_stack: Mutex<Vec<Menu>>,
     focused_menu_option: Mutex<Option<usize>>, // Index into current menu's options
     menu_focus_memory: Mutex<HashMap<String, usize>>, // Remember last focused option for each menu ID
+    session_name: Mutex<Option<String>>, // Current session mnemonic
 }
 
 impl UI {
@@ -94,6 +95,7 @@ impl UI {
             menu_stack: Mutex::new(Vec::new()),
             focused_menu_option: Mutex::new(None),
             menu_focus_memory: Mutex::new(HashMap::new()),
+            session_name: Mutex::new(None),
         }
     }
 
@@ -240,7 +242,12 @@ impl UI {
 
     /// Display the current graph of nodes and links
     fn display_graph(&self) {
-        println!("\n=== Graph State ===");
+        let session_name = self.session_name.lock().unwrap();
+        if let Some(ref name) = *session_name {
+            println!("\n=== Graph State - {} ===", name);
+        } else {
+            println!("\n=== Graph State ===");
+        }
         
         let nodes = self.nodes.lock().unwrap();
         let links = self.links.lock().unwrap();
@@ -703,6 +710,14 @@ impl UI {
         println!("Excellent! Finally, press the BACK BUTTON");
         println!("(This will be used for going back in menus)");
         println!("-------------------------------------------------");
+        Ok(())
+    }
+
+    /// Set the current session name (mnemonic)
+    pub fn set_session_name(&self, name: String) -> Result<()> {
+        debug!("Setting session name: {}", name);
+        *self.session_name.lock().unwrap() = Some(name);
+        self.display_graph();
         Ok(())
     }
 }

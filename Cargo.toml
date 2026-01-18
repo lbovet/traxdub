@@ -35,6 +35,12 @@ sophia_turtle = "0.8"
 # LV2 plugin host library
 lilv-sys = "0.1"
 
+# Random name generation
+rand = "0.8"
+
+# Date/time handling for persistence
+chrono = "0.4"
+
 [dev-dependencies]
 mockall = "0.12"
 

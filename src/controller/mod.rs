@@ -75,6 +75,7 @@ pub struct Controller {
     input_feature: Option<feature::InputFeature>,
     output_feature: Option<feature::OutputFeature>,
     plugin_feature: Option<feature::PluginFeature>,
+    persistence_feature: Option<feature::PersistenceFeature>,
     current_feature: Option<*mut dyn Feature>,
     /// The UI element that was selected when opening the current feature
     current_element: Option<crate::ui::Element>,
@@ -82,12 +83,12 @@ pub struct Controller {
 
 impl Controller {
     /// Create a new controller instance
-    pub fn new(ui: Arc<UI>, engine: Arc<Engine>, force_init: bool) -> Result<Self> {
+    pub fn new(ui: Arc<UI>, engine: Arc<Engine>, force_init: bool, new_session: bool) -> Result<Self> {
         let config_path = Self::get_config_path();
         
         let mut controller = Self {
-            ui,
-            engine,
+            ui: ui.clone(),
+            engine: engine.clone(),
             state: ControllerState::Initializing,
             base_control_config: None,
             config_path,
@@ -97,6 +98,7 @@ impl Controller {
             input_feature: None,
             output_feature: None,
             plugin_feature: None,
+            persistence_feature: None,
             current_feature: None,
             current_element: None,
         };
@@ -107,6 +109,13 @@ impl Controller {
         controller.ui.create_node("inputs".to_string(), "Inputs".to_string(), crate::ui::NodeType::System)?;
         controller.ui.create_node("outputs".to_string(), "Outputs".to_string(), crate::ui::NodeType::System)?;
         controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
+        
+        // Initialize persistence feature with auto-load flag
+        controller.persistence_feature = Some(feature::new_persistence_feature(
+            engine,
+            ui,
+            !new_session, // auto_load is opposite of new_session
+        ));
         
         Ok(controller)
     }
@@ -204,6 +213,12 @@ impl Controller {
                                 });
                             }
                             
+                            // Add File option (always available)
+                            options.push(crate::ui::MenuOption {
+                                id: "file".to_string(),
+                                name: "File...".to_string(),
+                            });
+                            
                             // Open menu if we have at least one option
                             if !options.is_empty() {
                                 let menu = crate::ui::Menu {
@@ -214,6 +229,20 @@ impl Controller {
                                 self.ui.open_menu(menu)?;
                                 self.state = ControllerState::BrowsingMenu;
                             }
+                        } else {
+                            // For node elements, only show File menu
+                            let menu = crate::ui::Menu {
+                                id: "node_menu".to_string(),
+                                name: "Node".to_string(),
+                                options: vec![
+                                    crate::ui::MenuOption {
+                                        id: "file".to_string(),
+                                        name: "File...".to_string(),
+                                    },
+                                ],
+                            };
+                            self.ui.open_menu(menu)?;
+                            self.state = ControllerState::BrowsingMenu;
                         }
                     }
                 }
@@ -268,6 +297,14 @@ impl Controller {
                             } else if option_id == "add_plugin" {
                                 self.current_feature = self.plugin_feature.as_mut().map(|f| f as *mut dyn Feature);
                                 // Open the plugin feature menu on top of the link menu
+                                if let Some(feature) = self.current_feature() {
+                                    let menu = feature.get_menu();
+                                    self.ui.open_menu(menu)?;
+                                }
+                                return Ok(());
+                            } else if option_id == "file" {
+                                self.current_feature = self.persistence_feature.as_mut().map(|f| f as *mut dyn Feature);
+                                // Open the file feature menu on top of the current menu
                                 if let Some(feature) = self.current_feature() {
                                     let menu = feature.get_menu();
                                     self.ui.open_menu(menu)?;
@@ -380,6 +417,8 @@ impl Controller {
             Arc::clone(&self.engine),
             Arc::clone(&self.ui),
         ));
+        
+        // Note: persistence_feature is already initialized in Controller::new()
         
         // Process events from the receiver until signal
         while running.load(Ordering::SeqCst) {

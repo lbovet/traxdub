@@ -144,6 +144,11 @@ impl Engine {
                 Ok(stream) => {
                     info!("Connected to Ingen socket");
                     *self.socket.lock().unwrap() = Some(stream);
+                    
+                    // Send initialization message with RDF prefixes
+                    debug!("Sending initialization message to Ingen");
+                    self.send_message(IngenProtocol::get_init_message())?;
+                    
                     return Ok(());
                 }
                 Err(e) => {
@@ -178,39 +183,51 @@ impl Engine {
     fn receive_message(&self) -> Result<String> {
         use std::io::Read;
         
-        debug!("Receiving message from Ingen...");
-        
-        let mut socket_guard = self.socket.lock().unwrap();
-        if let Some(socket) = socket_guard.as_mut() {
-            // Set a read timeout
-            socket.set_read_timeout(Some(Duration::from_secs(5)))
-                .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
+        loop {
+            debug!("Receiving message from Ingen...");
             
-            let mut buffer = String::new();
-            let mut temp_buf = [0u8; 4096];
-            
-            loop {
-                match socket.read(&mut temp_buf) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        // Check if null byte is in the received data
-                        if let Some(null_pos) = temp_buf[..n].iter().position(|&b| b == 0) {
-                            // Add data up to (but not including) the null byte
-                            buffer.push_str(&String::from_utf8_lossy(&temp_buf[..null_pos]));
-                            break;
+            let mut socket_guard = self.socket.lock().unwrap();
+            if let Some(socket) = socket_guard.as_mut() {
+                // Set a read timeout
+                socket.set_read_timeout(Some(Duration::from_secs(5)))
+                    .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
+                
+                let mut buffer = String::new();
+                let mut temp_buf = [0u8; 4096];
+                
+                loop {
+                    match socket.read(&mut temp_buf) {
+                        Ok(0) => break, // EOF
+                        Ok(n) => {
+                            // Check if null byte is in the received data
+                            if let Some(null_pos) = temp_buf[..n].iter().position(|&b| b == 0) {
+                                // Add data up to (but not including) the null byte
+                                buffer.push_str(&String::from_utf8_lossy(&temp_buf[..null_pos]));
+                                break;
+                            }
+                            buffer.push_str(&String::from_utf8_lossy(&temp_buf[..n]));
                         }
-                        buffer.push_str(&String::from_utf8_lossy(&temp_buf[..n]));
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Err(e) => return Err(anyhow!("Failed to read from Ingen socket: {}", e)),
                     }
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
-                    Err(e) => return Err(anyhow!("Failed to read from Ingen socket: {}", e)),
                 }
+                
+                debug!("Received {} bytes from Ingen", buffer.len());
+                trace!("Received buffer content:\n{}", buffer);
+                
+                // Drop the socket guard before checking bundle boundary
+                drop(socket_guard);
+                
+                // Check if this is a bundle boundary message - if so, ignore and receive again
+                if IngenProtocol::is_bundle_boundary(&buffer) {
+                    debug!("Received bundle boundary, ignoring and receiving next message");
+                    continue;
+                }
+                
+                return Ok(buffer);
+            } else {
+                return Err(anyhow!("Not connected to Ingen socket"));
             }
-            
-            debug!("Received {} bytes from Ingen", buffer.len());
-            trace!("Received buffer content:\n{}", buffer);
-            Ok(buffer)
-        } else {
-            Err(anyhow!("Not connected to Ingen socket"))
         }
     }
 
@@ -318,6 +335,33 @@ impl Engine {
 
         // Return the port path
         Ok(format!("ingen:/main/{}", port_name))
+    }
+
+    /// Get the raw state of the engine as a string
+    pub fn get_raw_state(&self) -> Result<String> {
+        info!("Getting raw engine state");
+        
+        // Build RDF message using protocol module
+        let message = IngenProtocol::build_get_state()?;
+        
+        // Send to Ingen
+        self.send_message(&message)?;
+        
+        // Receive response (full state)
+        let response = self.receive_message()?;
+        
+        Ok(response)
+    }
+
+    /// Set the raw state of the engine from a string
+    pub fn set_raw_state(&self, state_data: &str) -> Result<()> {
+        info!("Setting raw engine state ({} bytes)", state_data.len());
+        
+        // Send data diretly to Ingen
+        self.send_message(state_data)?;
+        self.receive_message()?; // Drain response
+        
+        Ok(())
     }
 
 }

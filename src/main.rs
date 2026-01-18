@@ -18,6 +18,10 @@ struct Args {
     /// Use external Ingen instance (don't start built-in Ingen process)
     #[arg(short, long)]
     external: bool,
+    
+    /// Start with a new session (don't load last saved state)
+    #[arg(short, long)]
+    new: bool,
 }
 
 fn main() -> Result<()> {
@@ -40,7 +44,7 @@ fn main() -> Result<()> {
     // Initialize modules
     let ui = Arc::new(ui::UI::new());
     let engine = Arc::new(engine::Engine::new(args.external)?);
-    let mut controller = controller::Controller::new(ui.clone(), engine.clone(), args.init)?;
+    let mut controller = controller::Controller::new(ui.clone(), engine.clone(), args.init, args.new)?;
     
     debug!("TraxDub initialized");
     
