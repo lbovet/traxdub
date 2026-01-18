@@ -26,6 +26,17 @@ pub enum PortDirection {
     Output,
 }
 
+/// Port information
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Port {
+    /// Port identifier/name
+    pub id: String,
+    /// Port type (Audio or Midi)
+    pub port_type: PortType,
+    /// Port direction (Input or Output)
+    pub direction: PortDirection,
+}
+
 /// Plugin metadata
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Plugin {
@@ -33,6 +44,8 @@ pub struct Plugin {
     pub id: String,
     /// The plugin name
     pub name: String,
+    /// List of ports
+    pub ports: Vec<Port>,
 }
 
 /// Engine module that encapsulates an Ingen instance
@@ -220,7 +233,15 @@ impl Engine {
 
     /// Create a new block (plugin instance)
     pub fn create_block(&self, plugin_uri: &str, block_id: &str) -> Result<()> {
-        // TODO: Implement
+        info!("Creating block '{}' with plugin '{}'", block_id, plugin_uri);
+        
+        // Build RDF message using protocol module
+        let message = IngenProtocol::build_create_block(block_id, plugin_uri)?;
+        
+        // Send to Ingen
+        self.send_message(&message)?;
+        self.receive_message()?; // Drain response
+        
         Ok(())
     }
 
@@ -264,6 +285,7 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
+        self.receive_message()?; // Drain response
 
         Ok(())
     }

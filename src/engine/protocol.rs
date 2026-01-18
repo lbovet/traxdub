@@ -77,12 +77,27 @@ impl IngenProtocol {
     pub fn build_create_block(block_id: &str, plugin_uri: &str) -> Result<String> {
         debug!("Building create_block message for '{}' with plugin '{}'", block_id, plugin_uri);
         
-        let graph = FastGraph::new();
-        let root = Self::create_blank_node();
-
-        // TODO: Implement
+        let mut graph = FastGraph::new();
+        let lv2 = Namespace::new(LV2_NS)?;
+        let ingen = Namespace::new(INGEN_NS)?;
+        let patch = Namespace::new(PATCH_NS)?;
         
-        Self::serialize_graph(&graph, &root)
+        let block_path = format!("ingen:/main/{}", block_id);
+        
+        // Create blank nodes
+        let body_node = Self::create_blank_node();
+        let put_node = Self::create_blank_node();
+        
+        // Build the body (block description)
+        graph.insert(&body_node, &rdf::type_, &ingen.get("Block")?)?;
+        graph.insert(&body_node, &lv2.get("prototype")?, &IriRef::new_unchecked(plugin_uri))?;
+        
+        // Build patch:Put structure
+        graph.insert(&put_node, &rdf::type_, &patch.get("Put")?)?;
+        graph.insert(&put_node, &patch.get("subject")?, &IriRef::new_unchecked(block_path.as_str()))?;
+        graph.insert(&put_node, &patch.get("body")?, &body_node)?;
+        
+        Self::serialize_graph(&graph, &put_node)
     }
 
     /// Build an RDF graph to connect two ports
@@ -113,12 +128,25 @@ impl IngenProtocol {
     pub fn build_disconnect(source: &str, destination: &str) -> Result<String> {
         debug!("Building disconnect message: '{}' -X- '{}'", source, destination);
         
-        let graph = FastGraph::new();
-        let root = Self::create_blank_node();
-
-        // TODO: Implement
+        let mut graph = FastGraph::new();
+        let ingen = Namespace::new(INGEN_NS)?;
+        let patch = Namespace::new(PATCH_NS)?;
         
-        Self::serialize_graph(&graph, &root)
+        // Create blank nodes for patch:Delete structure
+        let arc_node = Self::create_blank_node();
+        let delete_node = Self::create_blank_node();
+        
+        // Build the Arc (connection) to delete
+        graph.insert(&arc_node, &rdf::type_, &ingen.get("Arc")?)?;
+        graph.insert(&arc_node, &ingen.get("tail")?, &IriRef::new_unchecked(source))?;
+        graph.insert(&arc_node, &ingen.get("head")?, &IriRef::new_unchecked(destination))?;
+                
+        // Build patch:Delete structure
+        graph.insert(&delete_node, &rdf::type_, &patch.get("Delete")?)?;
+        graph.insert(&delete_node, &patch.get("subject")?, &IriRef::new_unchecked("ingen:/main/"))?;
+        graph.insert(&delete_node, &patch.get("body")?, &arc_node)?;
+        
+        Self::serialize_graph(&graph, &delete_node)
     }
 
     /// Build an RDF graph to delete a block or port

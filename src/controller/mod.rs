@@ -74,6 +74,7 @@ pub struct Controller {
     secondary_knob_accumulator: f32,
     input_feature: Option<feature::InputFeature>,
     output_feature: Option<feature::OutputFeature>,
+    plugin_feature: Option<feature::PluginFeature>,
     current_feature: Option<*mut dyn Feature>,
     /// The UI element that was selected when opening the current feature
     current_element: Option<crate::ui::Element>,
@@ -95,6 +96,7 @@ impl Controller {
             secondary_knob_accumulator: 0.0,
             input_feature: None,
             output_feature: None,
+            plugin_feature: None,
             current_feature: None,
             current_element: None,
         };
@@ -194,6 +196,14 @@ impl Controller {
                                 });
                             }
                             
+                            // Add plugin option if upstream is not "inputs"
+                            if from_id != "inputs" {
+                                options.push(crate::ui::MenuOption {
+                                    id: "add_plugin".to_string(),
+                                    name: "Add Plugin...".to_string(),
+                                });
+                            }
+                            
                             // Open menu if we have at least one option
                             if !options.is_empty() {
                                 let menu = crate::ui::Menu {
@@ -250,6 +260,14 @@ impl Controller {
                             } else if option_id == "add_output" {
                                 self.current_feature = self.output_feature.as_mut().map(|f| f as *mut dyn Feature);
                                 // Open the output feature menu on top of the link menu
+                                if let Some(feature) = self.current_feature() {
+                                    let menu = feature.get_menu();
+                                    self.ui.open_menu(menu)?;
+                                }
+                                return Ok(());
+                            } else if option_id == "add_plugin" {
+                                self.current_feature = self.plugin_feature.as_mut().map(|f| f as *mut dyn Feature);
+                                // Open the plugin feature menu on top of the link menu
                                 if let Some(feature) = self.current_feature() {
                                     let menu = feature.get_menu();
                                     self.ui.open_menu(menu)?;
@@ -353,6 +371,12 @@ impl Controller {
         // Initialize output feature with driver and engine
         self.output_feature = Some(feature::new_output_feature(
             Arc::clone(&driver),
+            Arc::clone(&self.engine),
+            Arc::clone(&self.ui),
+        ));
+        
+        // Initialize plugin feature
+        self.plugin_feature = Some(feature::new_plugin_feature(
             Arc::clone(&self.engine),
             Arc::clone(&self.ui),
         ));

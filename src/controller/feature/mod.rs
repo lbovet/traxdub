@@ -1,7 +1,9 @@
 pub mod system;
+pub mod plugin;
 
 // Re-export input and output features from system module
 pub use system::{InputFeature, OutputFeature, new_input_feature, new_output_feature};
+pub use plugin::{PluginFeature, new_plugin_feature};
 
 use anyhow::Result;
 use crate::ui::Menu;
