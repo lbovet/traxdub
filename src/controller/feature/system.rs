@@ -19,7 +19,6 @@ pub enum SystemDirection {
 /// Menu state for the system feature
 #[derive(Debug, Clone, PartialEq)]
 enum SystemMenuState {
-    MainMenu,
     PortTypeSelection,
     EndpointList(PortType), // Contains the selected port type (source/sink list)
     PortList(PortType, String), // Contains port type and endpoint name
@@ -41,7 +40,7 @@ impl SystemFeature {
             driver,
             engine,
             ui,
-            menu_state: SystemMenuState::MainMenu,
+            menu_state: SystemMenuState::PortTypeSelection,
             direction,
         }
     }
@@ -104,19 +103,7 @@ impl SystemFeature {
         result
     }
 
-    /// Get the main menu
-    fn get_main_menu(&self) -> Menu {
-        Menu {
-            id: format!("{}_main", self.direction_name()),
-            name: self.direction_name_cap().to_string(),
-            options: vec![
-                MenuOption {
-                    id: "add".to_string(),
-                    name: "Add...".to_string(),
-                },
-            ],
-        }
-    }
+
 
     /// Get the port type selection menu
     fn get_port_type_menu(&self) -> Menu {
@@ -213,18 +200,17 @@ impl SystemFeature {
 impl Feature for SystemFeature {
     fn get_menu(&self) -> Menu {
         match &self.menu_state {
-            SystemMenuState::MainMenu => self.get_main_menu(),
             SystemMenuState::PortTypeSelection => self.get_port_type_menu(),
             SystemMenuState::EndpointList(port_type) => {
                 self.get_endpoint_menu(*port_type).unwrap_or_else(|e| {
                     debug!("Error getting endpoint menu: {}", e);
-                    self.get_main_menu()
+                    self.get_port_type_menu()
                 })
             }
             SystemMenuState::PortList(port_type, endpoint_name) => {
                 self.get_port_menu(*port_type, endpoint_name).unwrap_or_else(|e| {
                     debug!("Error getting port menu for {}: {}", endpoint_name, e);
-                    self.get_main_menu()
+                    self.get_port_type_menu()
                 })
             }
         }
@@ -235,13 +221,9 @@ impl Feature for SystemFeature {
         let Some(option_id) = option_id else {
             debug!("{} feature: menu closed, reverting to previous state", self.direction_name_cap());
             match &self.menu_state {
-                SystemMenuState::MainMenu => {
-                    // Already at main menu, exit to navigating
-                    return Ok(ControllerState::Navigating);
-                }
                 SystemMenuState::PortTypeSelection => {
-                    self.menu_state = SystemMenuState::MainMenu;
-                    return Ok(ControllerState::BrowsingMenu);
+                    // At first menu, exit to navigating
+                    return Ok(ControllerState::Navigating);
                 }
                 SystemMenuState::EndpointList(_) => {
                     self.menu_state = SystemMenuState::PortTypeSelection;
@@ -257,21 +239,11 @@ impl Feature for SystemFeature {
         debug!("{} feature handling option: {}", self.direction_name_cap(), option_id);
 
         match &self.menu_state {
-            SystemMenuState::MainMenu => {
-                if option_id == "add" {
-                    // Transition to port type selection
-                    self.menu_state = SystemMenuState::PortTypeSelection;
-                    Ok(ControllerState::BrowsingMenu)
-                } else {
-                    Ok(ControllerState::Navigating)
-                }
-            }
             SystemMenuState::PortTypeSelection => {
                 let port_type = match option_id {
                     "type_audio" => PortType::Audio,
                     "type_midi" => PortType::Midi,
                     _ => {
-                        self.menu_state = SystemMenuState::MainMenu;
                         return Ok(ControllerState::Navigating);
                     }
                 };
@@ -285,7 +257,7 @@ impl Feature for SystemFeature {
                     self.menu_state = SystemMenuState::PortList(*port_type, endpoint_name.to_string());
                     Ok(ControllerState::BrowsingMenu)
                 } else {
-                    self.menu_state = SystemMenuState::MainMenu;
+                    self.menu_state = SystemMenuState::PortTypeSelection;
                     Ok(ControllerState::Navigating)
                 }
             }
@@ -392,22 +364,20 @@ impl Feature for SystemFeature {
                     match self.direction {
                         SystemDirection::Input => {
                             // For input: inputs -> port -> outputs
-                            let _ = self.ui.remove_link("inputs", "outputs");
                             self.ui.create_link("inputs".to_string(), sanitized_name.clone())?;
                             self.ui.create_link(sanitized_name, "outputs".to_string())?;
                         }
                         SystemDirection::Output => {
                             // For output: inputs -> port -> outputs
-                            let _ = self.ui.remove_link("inputs", "outputs");
                             self.ui.create_link("inputs".to_string(), sanitized_name.clone())?;
                             self.ui.create_link(sanitized_name, "outputs".to_string())?;
                         }
                     }
                     
-                    self.menu_state = SystemMenuState::MainMenu;
+                    self.menu_state = SystemMenuState::PortTypeSelection;
                     Ok(ControllerState::Navigating)
                 } else {
-                    self.menu_state = SystemMenuState::MainMenu;
+                    self.menu_state = SystemMenuState::PortTypeSelection;
                     Ok(ControllerState::Navigating)
                 }
             }

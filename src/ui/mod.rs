@@ -107,15 +107,16 @@ impl UI {
             node_type,
         };
         
+        // Set focus to the new node if navigable (check before moving)
+        let should_focus = node.node_type == NodeType::Normal;
+        
         self.nodes.lock().unwrap().insert(id.clone(), node);
         
-        // Set focus to first node if nothing is focused yet
-        let mut focused = self.focused_element.lock().unwrap();
-        if focused.is_none() {
+        if should_focus {
+            let mut focused = self.focused_element.lock().unwrap();
             *focused = Some(Element::Node(id.clone()));
-            debug!("Setting initial focus to node: {}", id);
+            drop(focused);
         }
-        drop(focused);
         
         self.display_graph();
         Ok(())
@@ -142,7 +143,7 @@ impl UI {
     pub fn create_link(&self, from_id: String, to_id: String) -> Result<()> {
         debug!("Creating link: {} -> {}", from_id, to_id);
         
-        // Verify both nodes exist
+        // Verify both nodes exist and check if they are system nodes
         let nodes = self.nodes.lock().unwrap();
         if !nodes.contains_key(&from_id) {
             return Err(anyhow::anyhow!("Source node not found: {}", from_id));
@@ -150,21 +151,37 @@ impl UI {
         if !nodes.contains_key(&to_id) {
             return Err(anyhow::anyhow!("Destination node not found: {}", to_id));
         }
+        
+        let from_is_system = nodes.get(&from_id).map(|n| n.node_type == NodeType::System).unwrap_or(false);
+        let to_is_system = nodes.get(&to_id).map(|n| n.node_type == NodeType::System).unwrap_or(false);
         drop(nodes);
         
         // Get and increment order counter
         let mut order_counter = self.order_counter.lock().unwrap();
         *order_counter += 1;
-        let link_order = *order_counter;
+        let link_order = if from_is_system && to_is_system {
+            // Links between system nodes get maximum order value
+            i64::MAX
+        } else {
+            *order_counter
+        };
         drop(order_counter);
         
         let link = Link { 
-            from_id, 
-            to_id,
+            from_id: from_id.clone(), 
+            to_id: to_id.clone(),
             visited_last: -link_order,
             order: link_order,
         };
         self.links.lock().unwrap().insert(link);
+        
+        // Focus the new link if nothing is focused yet
+        let mut focused = self.focused_element.lock().unwrap();
+        if focused.is_none() {
+            *focused = Some(Element::Link(from_id, to_id));
+        }
+        drop(focused);
+        
         self.display_graph();
         Ok(())
     }
@@ -351,16 +368,30 @@ impl UI {
                     }
                     Some(Element::Link(from_id, to_id)) => {
                         // Navigate from a link to a node
+                        let nodes = self.nodes.lock().unwrap();
+                        
                         match direction {
                             KnobDirection::Forward => {
-                                // Move to destination node
-                                trace!("Navigating from link {} -> {} to node {}", from_id, to_id, to_id);
-                                *focused = Some(Element::Node(to_id.clone()));
+                                // Move to destination node, but skip system nodes
+                                if let Some(node) = nodes.get(&to_id) {
+                                    if node.node_type != NodeType::System {
+                                        trace!("Navigating from link {} -> {} to node {}", from_id, to_id, to_id);
+                                        *focused = Some(Element::Node(to_id.clone()));
+                                    } else {
+                                        trace!("Skipping system node {} during navigation", to_id);
+                                    }
+                                }
                             }
                             KnobDirection::Backward => {
-                                // Move to source node
-                                trace!("Navigating from link {} -> {} to node {}", from_id, to_id, from_id);
-                                *focused = Some(Element::Node(from_id.clone()));
+                                // Move to source node, but skip system nodes
+                                if let Some(node) = nodes.get(&from_id) {
+                                    if node.node_type != NodeType::System {
+                                        trace!("Navigating from link {} -> {} to node {}", from_id, to_id, from_id);
+                                        *focused = Some(Element::Node(from_id.clone()));
+                                    } else {
+                                        trace!("Skipping system node {} during navigation", from_id);
+                                    }
+                                }
                             }
                         }
                     }
@@ -402,6 +433,7 @@ impl UI {
                         // Navigate from a node: find most recently visited incoming link,
                         // then find its sibling and focus the node it targets
                         let links = self.links.lock().unwrap();
+                        let nodes = self.nodes.lock().unwrap();
                         
                         // Find the most recently visited link targeting this node
                         if let Some(most_recent_link) = links.iter()
@@ -418,8 +450,16 @@ impl UI {
                             
                             if let Some(sibling_link) = Self::find_sibling_link(&sibling_links, current_order, &direction) {
                                 let target_node = &sibling_link.to_id;
-                                trace!("Navigating from node {} via sibling link to node {}", node_id, target_node);
-                                *focused = Some(Element::Node(target_node.clone()));
+                                
+                                // Check if target node is a system node - skip if it is
+                                if let Some(node) = nodes.get(target_node) {
+                                    if node.node_type != NodeType::System {
+                                        trace!("Navigating from node {} via sibling link to node {}", node_id, target_node);
+                                        *focused = Some(Element::Node(target_node.clone()));
+                                    } else {
+                                        trace!("Skipping system node {} during secondary navigation", target_node);
+                                    }
+                                }
                             }
                         }
                     }

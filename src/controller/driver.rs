@@ -346,11 +346,22 @@ impl Driver {
 
         debug!("Connecting JACK ports: {} -> {}", source_port.name, destination_port.name);
         
-        client.connect_ports_by_name(&source_port.name, &destination_port.name)
-            .map_err(|e| anyhow::anyhow!("Failed to connect ports: {:?}", e))?;
-
-        debug!("Successfully connected {} to {}", source_port.name, destination_port.name);
-        Ok(())
+        match client.connect_ports_by_name(&source_port.name, &destination_port.name) {
+            Ok(_) => {
+                debug!("Successfully connected {} to {}", source_port.name, destination_port.name);
+                Ok(())
+            }
+            Err(e) => {
+                // Check if ports are already connected - this is not an error
+                match e {
+                    jack::Error::PortAlreadyConnected(_, _) => {
+                        debug!("Ports already connected: {} -> {}", source_port.name, destination_port.name);
+                        Ok(())
+                    }
+                    _ => Err(anyhow::anyhow!("Failed to connect ports: {:?}", e))
+                }
+            }
+        }
     }
 
     /// Connect all MIDI input sources to the TraxDub Controller MIDI input port

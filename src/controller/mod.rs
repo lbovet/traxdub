@@ -170,14 +170,31 @@ impl Controller {
                     if let Some(element) = self.ui.select()? {
                         debug!("Selected element: {:?}", element);
                                                
-                        if let crate::ui::Element::Node(ref node_id) = element {
-                            if node_id == "inputs" {
-                                self.current_feature = self.input_feature.as_mut().map(|f| f as *mut dyn Feature);
-                            } else if node_id == "outputs" {
-                                self.current_feature = self.output_feature.as_mut().map(|f| f as *mut dyn Feature);
+                        if let crate::ui::Element::Link(ref from_id, ref to_id) = element {
+                            // Build menu options based on link endpoints
+                            let mut options = Vec::new();
+                            
+                            if from_id == "inputs" {
+                                options.push(crate::ui::MenuOption {
+                                    id: "add_input".to_string(),
+                                    name: "Add Input...".to_string(),
+                                });
                             }
-                            if let Some(feature) = self.current_feature_mut() {
-                                let menu = feature.get_menu();
+                            
+                            if to_id == "outputs" {
+                                options.push(crate::ui::MenuOption {
+                                    id: "add_output".to_string(),
+                                    name: "Add Output...".to_string(),
+                                });
+                            }
+                            
+                            // Open menu if we have at least one option
+                            if !options.is_empty() {
+                                let menu = crate::ui::Menu {
+                                    id: format!("link_{}_{}", from_id, to_id),
+                                    name: format!("{} → {}", from_id, to_id),
+                                    options,
+                                };
                                 self.ui.open_menu(menu)?;
                                 self.state = ControllerState::BrowsingMenu;
                             }
@@ -215,6 +232,25 @@ impl Controller {
                         debug!("Selected element in menu: {:?}", element);
                         
                         if let crate::ui::Element::MenuOption(_, ref option_id) = element {
+                            // Handle special link menu options
+                            if option_id == "add_input" {
+                                self.current_feature = self.input_feature.as_mut().map(|f| f as *mut dyn Feature);
+                                // Open the input feature menu on top of the link menu
+                                if let Some(feature) = self.current_feature() {
+                                    let menu = feature.get_menu();
+                                    self.ui.open_menu(menu)?;
+                                }
+                                return Ok(());
+                            } else if option_id == "add_output" {
+                                self.current_feature = self.output_feature.as_mut().map(|f| f as *mut dyn Feature);
+                                // Open the output feature menu on top of the link menu
+                                if let Some(feature) = self.current_feature() {
+                                    let menu = feature.get_menu();
+                                    self.ui.open_menu(menu)?;
+                                }
+                                return Ok(());
+                            }
+                            
                             // Handle menu option through the current active feature
                             let next_state = if let Some(feature) = self.current_feature_mut() {
                                 feature.handle_menu_option(Some(option_id))?
