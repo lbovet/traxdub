@@ -48,12 +48,45 @@ pub struct Plugin {
     pub ports: Vec<Port>,
 }
 
+/// Block in the graph (plugin instance)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Block {
+    /// Block path/ID (e.g., "ingen:/main/block_id")
+    pub id: String,
+    /// Block name
+    pub name: String,
+    /// List of ports
+    pub ports: Vec<Port>,
+}
+
+/// Connection between two ports
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Connection {
+    /// Source port path (e.g., "ingen:/main/block1/out")
+    pub source: String,
+    /// Destination port path (e.g., "ingen:/main/block2/in")
+    pub destination: String,
+}
+
+/// Graph representation of the current Ingen state
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Graph {
+    /// List of blocks in the graph
+    pub blocks: Vec<Block>,
+    /// List of connections between ports
+    pub connections: Vec<Connection>,
+    /// List of system ports (ports directly under ingen:/main/)
+    pub ports: Vec<Port>,
+}
+
 /// Engine module that encapsulates an Ingen instance
 pub struct Engine {
     ingen_process: Option<std::process::Child>,
     socket: Mutex<Option<UnixStream>>,
     /// List of available LV2 plugins
     plugins: Vec<Plugin>,
+    /// Buffer for leftover bytes after null terminator
+    read_buffer: Mutex<Vec<u8>>,
 }
 
 impl Engine {
@@ -68,6 +101,7 @@ impl Engine {
             ingen_process: None,
             socket: Mutex::new(None),
             plugins: Vec::new(),
+            read_buffer: Mutex::new(Vec::new()),
         };
 
         // Start Ingen in the background (unless using external)
@@ -165,8 +199,8 @@ impl Engine {
     
     /// Send a message to Ingen via the Unix socket
     fn send_message(&self, message: &str) -> Result<()> {
-        debug!("Sending message to Ingen: {}", message);
-        
+        debug!("Sending message to Ingen: {}", message);        
+
         let mut socket_guard = self.socket.lock().unwrap();
         if let Some(socket) = socket_guard.as_mut() {
             socket.write_all(message.as_bytes())
@@ -186,45 +220,176 @@ impl Engine {
         loop {
             debug!("Receiving message from Ingen...");
             
+            // Get any buffered bytes from the previous read
+            let mut read_buffer_guard = self.read_buffer.lock().unwrap();
+            let buffered = read_buffer_guard.clone();
+            read_buffer_guard.clear();
+            drop(read_buffer_guard);
+            
+            let mut buffer = buffered;
+            let mut bundle_start_seq: Option<String> = None;
+            let mut bundle_end_seq: Option<String> = None;
+            let mut found_bundle_end = false;
+            
             let mut socket_guard = self.socket.lock().unwrap();
             if let Some(socket) = socket_guard.as_mut() {
-                // Set a read timeout
-                socket.set_read_timeout(Some(Duration::from_secs(5)))
+                // Set a longer read timeout to handle large messages
+                socket.set_read_timeout(Some(Duration::from_secs(30)))
                     .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
                 
-                let mut buffer = String::new();
                 let mut temp_buf = [0u8; 4096];
                 
+                // Keep reading until we find the complete bundle (BundleStart -> BundleEnd -> ".")
                 loop {
                     match socket.read(&mut temp_buf) {
-                        Ok(0) => break, // EOF
-                        Ok(n) => {
-                            // Check if null byte is in the received data
-                            if let Some(null_pos) = temp_buf[..n].iter().position(|&b| b == 0) {
-                                // Add data up to (but not including) the null byte
-                                buffer.push_str(&String::from_utf8_lossy(&temp_buf[..null_pos]));
-                                break;
+                        Ok(0) => {
+                            // EOF - connection closed
+                            if buffer.is_empty() {
+                                return Err(anyhow!("Connection closed by Ingen"));
                             }
-                            buffer.push_str(&String::from_utf8_lossy(&temp_buf[..n]));
+                            break;
                         }
-                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                        Ok(n) => {
+                            // Filter out null bytes and append to buffer
+                            for &byte in &temp_buf[..n] {
+                                if byte != 0 {
+                                    buffer.push(byte);
+                                }
+                            }
+                            
+                            // Convert current buffer to string for line parsing
+                            let buffer_str = String::from_utf8_lossy(&buffer);
+                            
+                            // Look for BundleStart sequence number if not found yet
+                            if bundle_start_seq.is_none() {
+                                if let Some(start_pos) = buffer_str.find("a ingen:BundleStart") {
+                                    // Find the next line with patch:sequenceNumber
+                                    if let Some(seq_pos) = buffer_str[start_pos..].find("patch:sequenceNumber") {
+                                        let after_seq = &buffer_str[start_pos + seq_pos + 20..]; // Skip "patch:sequenceNumber"
+                                        // Extract the number in quotes
+                                        if let Some(quote_start) = after_seq.find('"') {
+                                            if let Some(quote_end) = after_seq[quote_start + 1..].find('"') {
+                                                let seq_num = &after_seq[quote_start + 1..quote_start + 1 + quote_end];
+                                                debug!("Bundle start sequence: {}", seq_num);
+                                                bundle_start_seq = Some(seq_num.to_string());
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Look for BundleEnd sequence number if start found but end not yet
+                            if bundle_start_seq.is_some() && bundle_end_seq.is_none() {
+                                if let Some(end_pos) = buffer_str.find("a ingen:BundleEnd") {
+                                    // Find the next line with patch:sequenceNumber
+                                    if let Some(seq_pos) = buffer_str[end_pos..].find("patch:sequenceNumber") {
+                                        let after_seq = &buffer_str[end_pos + seq_pos + 20..]; // Skip "patch:sequenceNumber"
+                                        // Extract the number in quotes
+                                        if let Some(quote_start) = after_seq.find('"') {
+                                            if let Some(quote_end) = after_seq[quote_start + 1..].find('"') {
+                                                let seq_num = &after_seq[quote_start + 1..quote_start + 1 + quote_end];
+                                                debug!("Bundle end sequence: {}", seq_num);
+                                                bundle_end_seq = Some(seq_num.to_string());
+                                                found_bundle_end = true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // If we found bundle end, look for the final dot
+                            if found_bundle_end {
+                                if let Some(dot_pos) = buffer_str.rfind('.') {
+                                    // Check if this dot is the last non-whitespace character
+                                    let after_dot = &buffer_str[dot_pos + 1..];
+                                    if after_dot.trim().is_empty() {
+                                        // Found the response boundary
+                                        debug!("Found response boundary at dot position {}", dot_pos);
+                                        
+                                        // Check if there are more bytes available to read
+                                        socket.set_read_timeout(Some(Duration::from_millis(1)))
+                                            .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
+                                        
+                                        let mut peek_buf = [0u8; 1];
+                                        match socket.read(&mut peek_buf) {
+                                            Ok(0) => {
+                                                // No more data, we can stop
+                                                // Save any bytes after the dot for next read
+                                                let dot_byte_pos = buffer_str[..=dot_pos].len();
+                                                if buffer.len() > dot_byte_pos {
+                                                    let remaining = &buffer[dot_byte_pos..];
+                                                    let mut read_buffer_guard = self.read_buffer.lock().unwrap();
+                                                    read_buffer_guard.extend_from_slice(remaining);
+                                                }
+                                                
+                                                // Truncate buffer at the dot (inclusive)
+                                                buffer.truncate(dot_byte_pos);
+                                                break;
+                                            }
+                                            Ok(_) => {
+                                                // More data available, put the peeked byte back into buffer
+                                                if peek_buf[0] != 0 {
+                                                    buffer.push(peek_buf[0]);
+                                                }
+                                                // Reset timeout and continue reading
+                                                socket.set_read_timeout(Some(Duration::from_secs(30)))
+                                                    .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
+                                                // Continue to next read
+                                            }
+                                            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+                                                // Timeout means no more data available
+                                                // Save any bytes after the dot for next read
+                                                let dot_byte_pos = buffer_str[..=dot_pos].len();
+                                                if buffer.len() > dot_byte_pos {
+                                                    let remaining = &buffer[dot_byte_pos..];
+                                                    let mut read_buffer_guard = self.read_buffer.lock().unwrap();
+                                                    read_buffer_guard.extend_from_slice(remaining);
+                                                }
+                                                
+                                                // Truncate buffer at the dot (inclusive)
+                                                buffer.truncate(dot_byte_pos);
+                                                break;
+                                            }
+                                            Err(e) => return Err(anyhow!("Failed to peek socket: {}", e)),
+                                        }
+                                    }
+
+                                }
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                            // Timeout
+                            if !buffer.is_empty() {
+                                warn!("Read timeout after receiving {} bytes", buffer.len());
+                                break;
+                            } else {
+                                return Err(anyhow!("Timeout waiting for data from Ingen"));
+                            }
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {
+                            // Interrupted system call, retry
+                            continue;
+                        }
                         Err(e) => return Err(anyhow!("Failed to read from Ingen socket: {}", e)),
                     }
                 }
                 
                 debug!("Received {} bytes from Ingen", buffer.len());
-                trace!("Received buffer content:\n{}", buffer);
                 
-                // Drop the socket guard before checking bundle boundary
+                // Convert buffer to String
+                let message = String::from_utf8_lossy(&buffer).to_string();
+                trace!("Response buffer:\n{}", message);
+                
+                // Drop the socket guard before checking message content
                 drop(socket_guard);
                 
-                // Check if this is a bundle boundary message - if so, ignore and receive again
-                if IngenProtocol::is_bundle_boundary(&buffer) {
-                    debug!("Received bundle boundary, ignoring and receiving next message");
+                // Check if this message contains actual content (patch:Put) - if not, ignore and receive again
+                if !message.contains("a patch:Put") {
+                    debug!("Message doesn't contain 'a patch:Put', ignoring and receiving next message");
                     continue;
                 }
                 
-                return Ok(buffer);
+                return Ok(message);
             } else {
                 return Err(anyhow!("Not connected to Ingen socket"));
             }
@@ -355,13 +520,36 @@ impl Engine {
 
     /// Set the raw state of the engine from a string
     pub fn set_raw_state(&self, state_data: &str) -> Result<()> {
-        info!("Setting raw engine state ({} bytes)", state_data.len());
+        debug!("Setting raw engine state ({} bytes)", state_data.len());
         
         // Send data diretly to Ingen
         self.send_message(state_data)?;
         self.receive_message()?; // Drain response
         
         Ok(())
+    }
+
+    /// Get the current graph from Ingen
+    pub fn get_graph(&self) -> Result<Graph> {
+        debug!("Getting graph from Ingen");
+        
+        // Build RDF message to get the graph
+        let message = IngenProtocol::build_get_state()?;
+        
+        // Send to Ingen
+        self.send_message(&message)?;
+        
+        // Receive and parse response
+        let response = self.receive_message()?;
+        let graph = IngenProtocol::parse_graph(&response)?;
+        
+        trace!("Parsed graph: {} blocks, {} connections, {} system ports", 
+               graph.blocks.len(), graph.connections.len(), graph.ports.len());
+        trace!("Blocks: {:?}", graph.blocks);
+        trace!("Connections: {:?}", graph.connections);
+        trace!("System ports: {:?}", graph.ports);
+        
+        Ok(graph)
     }
 
 }

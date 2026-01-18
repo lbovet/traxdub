@@ -226,60 +226,33 @@ impl IngenProtocol {
     pub fn parse_response(turtle_data: &str) -> Result<FastGraph> {
         debug!("Parsing Ingen response");
         
-        let graph = turtle::parse_str(turtle_data)
+        // Prepend common prefixes if not already present
+        let prefixes = "@prefix atom: <http://lv2plug.in/ns/ext/atom#> .
+@prefix doap: <http://usefulinc.com/ns/doap#> .
+@prefix ingen: <http://drobilla.net/ns/ingen#> .
+@prefix lv2: <http://lv2plug.in/ns/lv2core#> .
+@prefix midi: <http://lv2plug.in/ns/ext/midi#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix patch: <http://lv2plug.in/ns/ext/patch#> .
+@prefix pg: <http://lv2plug.in/ns/ext/port-groups#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix rsz: <http://lv2plug.in/ns/ext/resize-port#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+";
+        
+        // Combine prefixes with data
+        let full_data = format!("{}{}", prefixes, turtle_data);
+        
+        let graph = turtle::parse_str(&full_data)
             .collect_triples()
             .map_err(|e| anyhow!("Failed to parse Ingen RDF response: {}", e))?;
         
         Ok(graph)
     }
 
-    /// Check if the message is only a bundle boundary (contains only ingen:BundleEnd nodes)
-    pub fn is_bundle_boundary(turtle_data: &str) -> bool {
-        debug!("Checking if message is a bundle boundary");
-        
-        // Try to parse the response
-        let graph = match Self::parse_response(turtle_data) {
-            Ok(g) => g,
-            Err(_) => return false,
-        };
-        
-        // Get the ingen:BundleEnd type
-        let ingen = match Namespace::new(INGEN_NS) {
-            Ok(ns) => ns,
-            Err(_) => return false,
-        };
-        
-        let bundle_end = match ingen.get("BundleEnd") {
-            Ok(be) => be,
-            Err(_) => return false,
-        };
-        
-        // Check if there are any triples
-        let mut has_triples = false;
-        let mut all_bundle_end = true;
-        
-        // Iterate over all subjects with rdf:type statements
-        for triple in graph.triples() {
-            let triple = match triple {
-                Ok(t) => t,
-                Err(_) => continue,
-            };
-            
-            has_triples = true;
-            
-            // If this is a type statement
-            if triple.p() == &rdf::type_ {
-                // Check if it's NOT a BundleEnd
-                if triple.o() != &bundle_end {
-                    all_bundle_end = false;
-                    break;
-                }
-            }
-        }
-        
-        // It's a bundle boundary only if it has triples AND all type statements are BundleEnd
-        has_triples && all_bundle_end
-    }
+
 
     /// Parse plugin list from a get_plugins response
     pub fn parse_get_plugins(response: &str) -> Result<Vec<String>> {
@@ -366,6 +339,229 @@ impl IngenProtocol {
             .to_string();
         
         Ok(result)
+    }
+
+    /// Parse a graph structure from an Ingen response
+    pub fn parse_graph(response: &str) -> Result<super::Graph> {
+        use super::{Graph, Block, Connection, Port, PortType, PortDirection};
+        
+        debug!("Parsing graph from Ingen response");
+        
+        // Parse the response into an RDF graph
+        let graph = Self::parse_response(response)?;
+        
+        let ingen = Namespace::new(INGEN_NS)?;
+        let lv2 = Namespace::new(LV2_NS)?;
+        
+        let mut blocks = Vec::new();
+        let mut connections = Vec::new();
+        
+        // Find all blocks (nodes with ingen:Block type)
+        let ingen_block = ingen.get("Block")?;
+        let lv2_name = lv2.get("name")?;
+        let lv2_symbol = lv2.get("symbol")?;
+        let lv2_audio_port = lv2.get("AudioPort")?;
+        let lv2_cv_port = lv2.get("CVPort")?;
+        let lv2_input_port = lv2.get("InputPort")?;
+        let lv2_output_port = lv2.get("OutputPort")?;
+        
+        // Collect all block subjects
+        let mut block_subjects = std::collections::HashSet::new();
+        for triple in graph.triples() {
+            let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
+            if triple.p() == &rdf::type_ && triple.o() == &ingen_block {
+                if let Some(iri) = triple.s().iri() {
+                    block_subjects.insert(iri.to_string());
+                }
+            }
+        }
+        
+        // Process each block
+        for block_id in block_subjects {
+            let block_iri = IriRef::new_unchecked(block_id.as_str());
+            
+            // Get block name
+            let mut name = block_id.clone();
+            for triple in graph.triples_matching([&block_iri], [&lv2_name], sophia::api::term::matcher::Any) {
+                let triple = triple.map_err(|e| anyhow!("Error finding name: {}", e))?;
+                if let Some(literal) = triple.o().lexical_form() {
+                    name = literal.to_string();
+                    break;
+                }
+            }
+            
+            // Find all ports for this block
+            let mut ports = Vec::new();
+            
+            // Ports are subjects that have this block as part of their path
+            for triple in graph.triples() {
+                let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
+                
+                if let Some(port_iri) = triple.s().iri() {
+                    let port_str = port_iri.to_string();
+                    
+                    // Check if this port belongs to this block
+                    if port_str.starts_with(&block_id) && port_str != block_id && port_str.contains('/') {
+                        // Check if it has a port type
+                        let port_subject = triple.s();
+                        
+                        let mut is_audio = false;
+                        let mut is_cv = false;
+                        let mut is_input = false;
+                        let mut is_output = false;
+                        let mut port_symbol = port_str.split('/').last().unwrap_or("").to_string();
+                        
+                        // Check port properties
+                        for t in graph.triples_matching([port_subject], sophia::api::term::matcher::Any, sophia::api::term::matcher::Any) {
+                            let t = t.map_err(|e| anyhow!("Error finding port properties: {}", e))?;
+                            
+                            if t.p() == &rdf::type_ {
+                                if t.o() == &lv2_audio_port {
+                                    is_audio = true;
+                                } else if t.o() == &lv2_cv_port {
+                                    is_cv = true;
+                                } else if t.o() == &lv2_input_port {
+                                    is_input = true;
+                                } else if t.o() == &lv2_output_port {
+                                    is_output = true;
+                                }
+                            } else if t.p() == &lv2_symbol {
+                                if let Some(literal) = t.o().lexical_form() {
+                                    port_symbol = literal.to_string();
+                                }
+                            }
+                        }
+                        
+                        // Only add if we have both type and direction
+                        if (is_audio || is_cv) && (is_input || is_output) {
+                            ports.push(Port {
+                                id: port_symbol,
+                                port_type: if is_audio { PortType::Audio } else { PortType::Midi },
+                                direction: if is_input { PortDirection::Input } else { PortDirection::Output },
+                            });
+                        }
+                    }
+                }
+            }
+            
+            // Deduplicate ports
+            ports.sort_by(|a, b| a.id.cmp(&b.id));
+            ports.dedup_by(|a, b| a.id == b.id);
+            
+            blocks.push(Block {
+                id: block_id,
+                name,
+                ports,
+            });
+        }
+        
+        // Find all connections (ingen:Arc)
+        let ingen_arc = ingen.get("Arc")?;
+        let ingen_tail = ingen.get("tail")?;
+        let ingen_head = ingen.get("head")?;
+        
+        for triple in graph.triples() {
+            let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
+            
+            if triple.p() == &rdf::type_ && triple.o() == &ingen_arc {
+                let arc_subject = triple.s();
+                
+                let mut source = None;
+                let mut destination = None;
+                
+                // Find tail (source)
+                for t in graph.triples_matching([arc_subject], [&ingen_tail], sophia::api::term::matcher::Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding arc tail: {}", e))?;
+                    if let Some(iri) = t.o().iri() {
+                        source = Some(iri.to_string());
+                        break;
+                    }
+                }
+                
+                // Find head (destination)
+                for t in graph.triples_matching([arc_subject], [&ingen_head], sophia::api::term::matcher::Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding arc head: {}", e))?;
+                    if let Some(iri) = t.o().iri() {
+                        destination = Some(iri.to_string());
+                        break;
+                    }
+                }
+                
+                if let (Some(src), Some(dst)) = (source, destination) {
+                    connections.push(Connection {
+                        source: src,
+                        destination: dst,
+                    });
+                }
+            }
+        }
+        
+        // Find system ports (ports directly under ingen:/main/)
+        let mut system_ports = Vec::new();
+        let main_prefix = "ingen:/main/";
+        
+        // Iterate through all subjects to find system ports
+        let mut port_subjects = std::collections::HashSet::new();
+        for triple in graph.triples() {
+            let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
+            
+            if let Some(iri) = triple.s().iri() {
+                let iri_str = iri.to_string();
+                
+                // Check if it's directly under ingen:/main/ (no additional slashes)
+                if iri_str.starts_with(main_prefix) && iri_str != "ingen:/main/" {
+                    let suffix = &iri_str[main_prefix.len()..];
+                    
+                    // System port: no slashes in the suffix (not a block or block port)
+                    if !suffix.contains('/') {
+                        port_subjects.insert(iri_str);
+                    }
+                }
+            }
+        }
+        
+        // Process each system port
+        for port_id in port_subjects {
+            let port_iri = IriRef::new_unchecked(port_id.as_str());
+            
+            let mut is_audio = false;
+            let mut is_cv = false;
+            let mut is_input = false;
+            let mut is_output = false;
+            let mut port_symbol = port_id.strip_prefix(main_prefix).unwrap_or(&port_id).to_string();
+            
+            // Check port properties
+            for triple in graph.triples_matching([&port_iri], sophia::api::term::matcher::Any, sophia::api::term::matcher::Any) {
+                let triple = triple.map_err(|e| anyhow!("Error finding port properties: {}", e))?;
+                
+                if triple.p() == &rdf::type_ {
+                    if triple.o() == &lv2_audio_port {
+                        is_audio = true;
+                    } else if triple.o() == &lv2_cv_port {
+                        is_cv = true;
+                    } else if triple.o() == &lv2_input_port {
+                        is_input = true;
+                    } else if triple.o() == &lv2_output_port {
+                        is_output = true;
+                    }
+                } else if triple.p() == &lv2_symbol {
+                    if let Some(literal) = triple.o().lexical_form() {
+                        port_symbol = literal.to_string();
+                    }
+                }
+            }
+            
+            // Only add if we have both type and direction
+            if (is_audio || is_cv) && (is_input || is_output) {
+                system_ports.push(Port {
+                    id: port_symbol,
+                    port_type: if is_audio { PortType::Audio } else { PortType::Midi },
+                    direction: if is_input { PortDirection::Input } else { PortDirection::Output },
+                });
+            }
+        }
+        
+        Ok(Graph { blocks, connections, ports: system_ports })
     }
 }
 

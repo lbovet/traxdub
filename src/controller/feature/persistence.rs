@@ -253,7 +253,7 @@ impl PersistenceFeature {
         let store_dir = Self::get_store_dir()?;
         let filepath = store_dir.join(&filename);
         
-        info!("Loading state from: {:?}", filepath);
+        debug!("Loading state from: {:?}", filepath);
         
         // Read file content
         let state_data = fs::read_to_string(&filepath)?;
@@ -261,8 +261,72 @@ impl PersistenceFeature {
         // Set engine state
         self.engine.set_raw_state(&state_data)?;
         
-        info!("State loaded successfully");
+        // Get the graph from engine and update UI
+        self.sync_ui_from_engine()?;
+        
+        debug!("State loaded successfully");
         Ok(())
+    }
+    
+    /// Synchronize UI with engine graph
+    fn sync_ui_from_engine(&self) -> Result<()> {
+        debug!("Synchronizing UI with engine graph");
+        
+        // Get current graph from engine
+        let graph = self.engine.get_graph()?;
+        
+        // Clear existing UI nodes and links (except system nodes)
+        // Note: We should add a method to clear the UI, but for now we'll just add nodes
+        
+        // Create nodes for each block
+        for block in &graph.blocks {
+            // Skip if it's a system node (already exists)
+            if block.id == "ingen:/main/inputs" || block.id == "ingen:/main/outputs" {
+                continue;
+            }
+            
+            // Extract node name from path
+            let node_name = block.id.strip_prefix("ingen:/main/")
+                .unwrap_or(&block.id)
+                .to_string();
+            
+            debug!("Creating UI node: {} ({})", node_name, block.name);
+            self.ui.create_node(
+                block.id.clone(),
+                block.name.clone(),
+                crate::ui::NodeType::Normal,
+            )?;
+        }
+        
+        // Create links for each connection
+        for connection in &graph.connections {
+            // Extract node IDs from port paths
+            // Port path format: "ingen:/main/node_id/port_id"
+            let from_id = self.extract_node_from_port(&connection.source);
+            let to_id = self.extract_node_from_port(&connection.destination);
+            
+            debug!("Creating UI link: {} -> {}", from_id, to_id);
+            
+            // Only create link if we haven't already
+            // Note: create_link should handle duplicates gracefully
+            if let Err(e) = self.ui.create_link(from_id, to_id) {
+                debug!("Link creation failed (may already exist): {}", e);
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Extract node ID from a port path
+    fn extract_node_from_port(&self, port_path: &str) -> String {
+        // Port path format: "ingen:/main/node_id/port_id"
+        // We want to extract "ingen:/main/node_id"
+        let parts: Vec<&str> = port_path.rsplitn(2, '/').collect();
+        if parts.len() == 2 {
+            parts[1].to_string()
+        } else {
+            port_path.to_string()
+        }
     }
     
     /// Get list of all saved mnemonics (newest first)
