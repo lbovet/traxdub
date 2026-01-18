@@ -301,12 +301,14 @@ impl Controller {
         self.input_feature = Some(feature::new_input_feature(
             Arc::clone(&driver),
             Arc::clone(&self.engine),
+            Arc::clone(&self.ui),
         ));
         
         // Initialize output feature with driver and engine
         self.output_feature = Some(feature::new_output_feature(
             Arc::clone(&driver),
             Arc::clone(&self.engine),
+            Arc::clone(&self.ui),
         ));
         
         // Process events from the receiver until signal

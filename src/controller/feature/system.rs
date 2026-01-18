@@ -7,7 +7,7 @@ use std::time::Duration;
 use crate::controller::driver::{Driver, PortType};
 use crate::controller::{ControllerState, feature::Feature};
 use crate::engine::Engine;
-use crate::ui::{Menu, MenuOption};
+use crate::ui::{Menu, MenuOption, UI, NodeType};
 
 /// Direction of the system feature (input or output)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -29,16 +29,18 @@ enum SystemMenuState {
 pub struct SystemFeature {
     driver: Arc<Driver>,
     engine: Arc<Engine>,
+    ui: Arc<UI>,
     menu_state: SystemMenuState,
     direction: SystemDirection,
 }
 
 impl SystemFeature {
     /// Create a new system feature with specified direction
-    pub fn new(driver: Arc<Driver>, engine: Arc<Engine>, direction: SystemDirection) -> Self {
+    pub fn new(driver: Arc<Driver>, engine: Arc<Engine>, ui: Arc<UI>, direction: SystemDirection) -> Self {
         Self {
             driver,
             engine,
+            ui,
             menu_state: SystemMenuState::MainMenu,
             direction,
         }
@@ -379,6 +381,29 @@ impl Feature for SystemFeature {
                     debug!("Successfully created and connected {} port: {}", 
                            self.direction_name(), sanitized_name);
                     
+                    // Create UI node for this port
+                    self.ui.create_node(
+                        sanitized_name.clone(),
+                        port_name.split(':').last().unwrap_or(port_name).to_string(),
+                        NodeType::Normal
+                    )?;
+                    
+                    // Create links based on direction and remove inputs->outputs link
+                    match self.direction {
+                        SystemDirection::Input => {
+                            // For input: inputs -> port -> outputs
+                            let _ = self.ui.remove_link("inputs", "outputs");
+                            self.ui.create_link("inputs".to_string(), sanitized_name.clone())?;
+                            self.ui.create_link(sanitized_name, "outputs".to_string())?;
+                        }
+                        SystemDirection::Output => {
+                            // For output: inputs -> port -> outputs
+                            let _ = self.ui.remove_link("inputs", "outputs");
+                            self.ui.create_link("inputs".to_string(), sanitized_name.clone())?;
+                            self.ui.create_link(sanitized_name, "outputs".to_string())?;
+                        }
+                    }
+                    
                     self.menu_state = SystemMenuState::MainMenu;
                     Ok(ControllerState::Navigating)
                 } else {
@@ -395,8 +420,8 @@ impl Feature for SystemFeature {
 pub type InputFeature = SystemFeature;
 
 /// Helper to create a new input feature
-pub fn new_input_feature(driver: Arc<Driver>, engine: Arc<Engine>) -> InputFeature {
-    SystemFeature::new(driver, engine, SystemDirection::Input)
+pub fn new_input_feature(driver: Arc<Driver>, engine: Arc<Engine>, ui: Arc<UI>) -> InputFeature {
+    SystemFeature::new(driver, engine, ui, SystemDirection::Input)
 }
 
 /// Output feature for managing audio/MIDI outputs
@@ -404,6 +429,6 @@ pub fn new_input_feature(driver: Arc<Driver>, engine: Arc<Engine>) -> InputFeatu
 pub type OutputFeature = SystemFeature;
 
 /// Helper to create a new output feature
-pub fn new_output_feature(driver: Arc<Driver>, engine: Arc<Engine>) -> OutputFeature {
-    SystemFeature::new(driver, engine, SystemDirection::Output)
+pub fn new_output_feature(driver: Arc<Driver>, engine: Arc<Engine>, ui: Arc<UI>) -> OutputFeature {
+    SystemFeature::new(driver, engine, ui, SystemDirection::Output)
 }
