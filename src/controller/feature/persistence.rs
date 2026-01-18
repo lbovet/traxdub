@@ -280,22 +280,42 @@ impl PersistenceFeature {
         
         // Create nodes for each block
         for block in &graph.blocks {
-            // Skip if it's a system node (already exists)
-            if block.id == "ingen:/main/inputs" || block.id == "ingen:/main/outputs" {
-                continue;
-            }
-            
-            // Extract node name from path
-            let node_name = block.id.strip_prefix("ingen:/main/")
-                .unwrap_or(&block.id)
-                .to_string();
-            
-            debug!("Creating UI node: {} ({})", node_name, block.name);
+        
+          debug!("Creating UI node: {} ", block.name);
             self.ui.create_node(
                 block.id.clone(),
                 block.name.clone(),
                 crate::ui::NodeType::Normal,
             )?;
+        }
+        
+        // Create nodes for each system port
+        for port in &graph.ports {
+            debug!("Creating UI node for system port: {}", port.id);
+            
+            let port_node_id = format!("ingen:/main/{}", port.id);
+            
+            self.ui.create_node(
+                port_node_id.clone(),
+                port.id.clone(),
+                crate::ui::NodeType::System,
+            )?;
+            
+            // Link system port to its corresponding system node
+            match port.direction {
+                crate::engine::PortDirection::Input => {
+                    // Input ports connect from "inputs" to the port
+                    if let Err(e) = self.ui.create_link("inputs".to_string(), port_node_id) {
+                        debug!("Failed to create link from inputs to {}: {}", port.id, e);
+                    }
+                }
+                crate::engine::PortDirection::Output => {
+                    // Output ports connect from the port to "outputs"
+                    if let Err(e) = self.ui.create_link(port_node_id, "outputs".to_string()) {
+                        debug!("Failed to create link from {} to outputs: {}", port.id, e);
+                    }
+                }
+            }
         }
         
         // Create links for each connection
@@ -319,11 +339,11 @@ impl PersistenceFeature {
     
     /// Extract node ID from a port path
     fn extract_node_from_port(&self, port_path: &str) -> String {
-        // Port path format: "ingen:/main/node_id/port_id"
-        // We want to extract "ingen:/main/node_id"
-        let parts: Vec<&str> = port_path.rsplitn(2, '/').collect();
-        if parts.len() == 2 {
-            parts[1].to_string()
+        // Port path format: "ingen:/main/node_id/port_id" or "ingen:/main/system_port"
+        // We want to extract the first three segments: "ingen:/main/node_id"
+        let parts: Vec<&str> = port_path.split('/').collect();
+        if parts.len() >= 3 {
+            parts[..3].join("/")
         } else {
             port_path.to_string()
         }

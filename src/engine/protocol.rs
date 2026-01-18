@@ -352,26 +352,57 @@ impl IngenProtocol {
         
         let ingen = Namespace::new(INGEN_NS)?;
         let lv2 = Namespace::new(LV2_NS)?;
+        let patch = Namespace::new(PATCH_NS)?;
         
         let mut blocks = Vec::new();
         let mut connections = Vec::new();
         
-        // Find all blocks (nodes with ingen:Block type)
+        // Find all blocks from patch:Put messages
         let ingen_block = ingen.get("Block")?;
         let lv2_name = lv2.get("name")?;
         let lv2_symbol = lv2.get("symbol")?;
+        let lv2_prototype = lv2.get("prototype")?;
         let lv2_audio_port = lv2.get("AudioPort")?;
         let lv2_cv_port = lv2.get("CVPort")?;
         let lv2_input_port = lv2.get("InputPort")?;
         let lv2_output_port = lv2.get("OutputPort")?;
+        let patch_put = patch.get("Put")?;
+        let patch_subject = patch.get("subject")?;
+        let patch_body = patch.get("body")?;
         
-        // Collect all block subjects
+        // Collect all block subjects from patch:Put messages
         let mut block_subjects = std::collections::HashSet::new();
         for triple in graph.triples() {
             let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
-            if triple.p() == &rdf::type_ && triple.o() == &ingen_block {
-                if let Some(iri) = triple.s().iri() {
-                    block_subjects.insert(iri.to_string());
+            
+            // Check if this is a patch:Put
+            if triple.p() == &rdf::type_ && triple.o() == &patch_put {
+                let put_node = triple.s();
+                
+                // Find the subject and body of this Put
+                let mut subject_uri: Option<String> = None;
+                let mut body_node = None;
+                
+                for t in graph.triples_matching([put_node], [&patch_subject], sophia::api::term::matcher::Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding subject: {}", e))?;
+                    if let Some(iri) = t.o().iri() {
+                        subject_uri = Some(iri.to_string());
+                    }
+                }
+                
+                for t in graph.triples_matching([put_node], [&patch_body], sophia::api::term::matcher::Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding body: {}", e))?;
+                    body_node = Some(t.o());
+                }
+                
+                // Check if the body contains ingen:Block type
+                if let (Some(uri), Some(body)) = (subject_uri, body_node) {
+                    for t in graph.triples_matching([body], [&rdf::type_], [&ingen_block]) {
+                        if t.is_ok() {
+                            block_subjects.insert(uri.clone());
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -380,8 +411,10 @@ impl IngenProtocol {
         for block_id in block_subjects {
             let block_iri = IriRef::new_unchecked(block_id.as_str());
             
-            // Get block name
-            let mut name = block_id.clone();
+            // Get block name from the block subject itself or from patch:Put body
+            let mut name = block_id.split('/').last().unwrap_or(&block_id).to_string();
+            
+            // Try to get name from direct triples on the block
             for triple in graph.triples_matching([&block_iri], [&lv2_name], sophia::api::term::matcher::Any) {
                 let triple = triple.map_err(|e| anyhow!("Error finding name: {}", e))?;
                 if let Some(literal) = triple.o().lexical_form() {
@@ -390,55 +423,71 @@ impl IngenProtocol {
                 }
             }
             
-            // Find all ports for this block
+            // Find all ports for this block from patch:Put messages
             let mut ports = Vec::new();
             
-            // Ports are subjects that have this block as part of their path
+            // Look for ports in patch:Put messages
             for triple in graph.triples() {
                 let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
                 
-                if let Some(port_iri) = triple.s().iri() {
-                    let port_str = port_iri.to_string();
+                // Check if this is a patch:Put
+                if triple.p() == &rdf::type_ && triple.o() == &patch_put {
+                    let put_node = triple.s();
+                    
+                    // Find the subject and body of this Put
+                    let mut subject_uri: Option<String> = None;
+                    let mut body_node = None;
+                    
+                    for t in graph.triples_matching([put_node], [&patch_subject], sophia::api::term::matcher::Any) {
+                        let t = t.map_err(|e| anyhow!("Error finding subject: {}", e))?;
+                        if let Some(iri) = t.o().iri() {
+                            subject_uri = Some(iri.to_string());
+                        }
+                    }
+                    
+                    for t in graph.triples_matching([put_node], [&patch_body], sophia::api::term::matcher::Any) {
+                        let t = t.map_err(|e| anyhow!("Error finding body: {}", e))?;
+                        body_node = Some(t.o());
+                    }
                     
                     // Check if this port belongs to this block
-                    if port_str.starts_with(&block_id) && port_str != block_id && port_str.contains('/') {
-                        // Check if it has a port type
-                        let port_subject = triple.s();
-                        
-                        let mut is_audio = false;
-                        let mut is_cv = false;
-                        let mut is_input = false;
-                        let mut is_output = false;
-                        let mut port_symbol = port_str.split('/').last().unwrap_or("").to_string();
-                        
-                        // Check port properties
-                        for t in graph.triples_matching([port_subject], sophia::api::term::matcher::Any, sophia::api::term::matcher::Any) {
-                            let t = t.map_err(|e| anyhow!("Error finding port properties: {}", e))?;
+                    if let (Some(port_uri), Some(body)) = (subject_uri, body_node) {
+                        if port_uri.starts_with(&block_id) && port_uri != block_id {
+                            let mut is_audio = false;
+                            let mut is_cv = false;
+                            let mut is_input = false;
+                            let mut is_output = false;
+                            let mut port_symbol = port_uri.split('/').last().unwrap_or("").to_string();
                             
-                            if t.p() == &rdf::type_ {
-                                if t.o() == &lv2_audio_port {
-                                    is_audio = true;
-                                } else if t.o() == &lv2_cv_port {
-                                    is_cv = true;
-                                } else if t.o() == &lv2_input_port {
-                                    is_input = true;
-                                } else if t.o() == &lv2_output_port {
-                                    is_output = true;
-                                }
-                            } else if t.p() == &lv2_symbol {
-                                if let Some(literal) = t.o().lexical_form() {
-                                    port_symbol = literal.to_string();
+                            // Check port properties in the body
+                            for t in graph.triples_matching([body], sophia::api::term::matcher::Any, sophia::api::term::matcher::Any) {
+                                let t = t.map_err(|e| anyhow!("Error finding port properties: {}", e))?;
+                                
+                                if t.p() == &rdf::type_ {
+                                    if t.o() == &lv2_audio_port {
+                                        is_audio = true;
+                                    } else if t.o() == &lv2_cv_port {
+                                        is_cv = true;
+                                    } else if t.o() == &lv2_input_port {
+                                        is_input = true;
+                                    } else if t.o() == &lv2_output_port {
+                                        is_output = true;
+                                    }
+                                } else if t.p() == &lv2_symbol {
+                                    if let Some(literal) = t.o().lexical_form() {
+                                        port_symbol = literal.to_string();
+                                    }
                                 }
                             }
-                        }
-                        
-                        // Only add if we have both type and direction
-                        if (is_audio || is_cv) && (is_input || is_output) {
-                            ports.push(Port {
-                                id: port_symbol,
-                                port_type: if is_audio { PortType::Audio } else { PortType::Midi },
-                                direction: if is_input { PortDirection::Input } else { PortDirection::Output },
-                            });
+                            
+                            // Only add if we have both type and direction
+                            if (is_audio || is_cv) && (is_input || is_output) {
+                                ports.push(Port {
+                                    id: port_symbol,
+                                    port_type: if is_audio { PortType::Audio } else { PortType::Midi },
+                                    direction: if is_input { PortDirection::Input } else { PortDirection::Output },
+                                });
+                            }
                         }
                     }
                 }
@@ -500,64 +549,86 @@ impl IngenProtocol {
         let mut system_ports = Vec::new();
         let main_prefix = "ingen:/main/";
         
-        // Iterate through all subjects to find system ports
-        let mut port_subjects = std::collections::HashSet::new();
+        // Parse ports from patch:Put messages
+        let patch = Namespace::new(PATCH_NS)?;
+        let patch_put = patch.get("Put")?;
+        let patch_subject = patch.get("subject")?;
+        let patch_body = patch.get("body")?;
+        
+        // Iterate over all triples to find patch:Put nodes
         for triple in graph.triples() {
             let triple = triple.map_err(|e| anyhow!("Error iterating triples: {}", e))?;
             
-            if let Some(iri) = triple.s().iri() {
-                let iri_str = iri.to_string();
+            // Check if this is a patch:Put
+            if triple.p() == &rdf::type_ && triple.o() == &patch_put {
+                let put_node = triple.s();
                 
-                // Check if it's directly under ingen:/main/ (no additional slashes)
-                if iri_str.starts_with(main_prefix) && iri_str != "ingen:/main/" {
-                    let suffix = &iri_str[main_prefix.len()..];
-                    
-                    // System port: no slashes in the suffix (not a block or block port)
-                    if !suffix.contains('/') {
-                        port_subjects.insert(iri_str);
+                // Find the subject and body of this Put
+                let mut subject_uri: Option<String> = None;
+                let mut body_node = None;
+                
+                for t in graph.triples_matching([put_node], [&patch_subject], sophia::api::term::matcher::Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding subject: {}", e))?;
+                    // Extract the IRI value from the object
+                    if let Some(iri) = t.o().iri() {
+                        subject_uri = Some(iri.to_string());
                     }
                 }
-            }
-        }
-        
-        // Process each system port
-        for port_id in port_subjects {
-            let port_iri = IriRef::new_unchecked(port_id.as_str());
-            
-            let mut is_audio = false;
-            let mut is_cv = false;
-            let mut is_input = false;
-            let mut is_output = false;
-            let mut port_symbol = port_id.strip_prefix(main_prefix).unwrap_or(&port_id).to_string();
-            
-            // Check port properties
-            for triple in graph.triples_matching([&port_iri], sophia::api::term::matcher::Any, sophia::api::term::matcher::Any) {
-                let triple = triple.map_err(|e| anyhow!("Error finding port properties: {}", e))?;
                 
-                if triple.p() == &rdf::type_ {
-                    if triple.o() == &lv2_audio_port {
-                        is_audio = true;
-                    } else if triple.o() == &lv2_cv_port {
-                        is_cv = true;
-                    } else if triple.o() == &lv2_input_port {
-                        is_input = true;
-                    } else if triple.o() == &lv2_output_port {
-                        is_output = true;
-                    }
-                } else if triple.p() == &lv2_symbol {
-                    if let Some(literal) = triple.o().lexical_form() {
-                        port_symbol = literal.to_string();
+                for t in graph.triples_matching([put_node], [&patch_body], sophia::api::term::matcher::Any) {
+                    let t = t.map_err(|e| anyhow!("Error finding body: {}", e))?;
+                    body_node = Some(t.o());
+                }
+                
+                // Check if this is a system port (subject is directly under ingen:/main/)
+                if let (Some(uri), Some(body)) = (subject_uri, body_node) {
+                    if uri.starts_with(main_prefix) && uri != "ingen:/main/" {
+                        let suffix = &uri[main_prefix.len()..];
+                        
+                        // System port: no slashes in the suffix (not a block or block port)
+                        if !suffix.contains('/') {
+                            let mut is_audio = false;
+                            let mut is_cv = false;
+                            let mut is_input = false;
+                            let mut is_output = false;
+                            let mut port_name = suffix.to_string();
+                            
+                            // Check port properties in the body
+                            for t in graph.triples_matching([body], sophia::api::term::matcher::Any, sophia::api::term::matcher::Any) {
+                                let t = t.map_err(|e| anyhow!("Error finding port properties: {}", e))?;
+                                
+                                if t.p() == &rdf::type_ {
+                                    if t.o() == &lv2_audio_port {
+                                        is_audio = true;
+                                    } else if t.o() == &lv2_cv_port {
+                                        is_cv = true;
+                                    } else if t.o() == &lv2_input_port {
+                                        is_input = true;
+                                    } else if t.o() == &lv2_output_port {
+                                        is_output = true;
+                                    }
+                                } else if t.p() == &lv2_name {
+                                    if let Some(literal) = t.o().lexical_form() {
+                                        port_name = literal.to_string();
+                                    }
+                                } else if t.p() == &lv2_symbol {
+                                    if let Some(literal) = t.o().lexical_form() {
+                                        port_name = literal.to_string();
+                                    }
+                                }
+                            }
+                            
+                            // Only add if we have both type and direction
+                            if (is_audio || is_cv) && (is_input || is_output) {
+                                system_ports.push(Port {
+                                    id: port_name,
+                                    port_type: if is_audio { PortType::Audio } else { PortType::Midi },
+                                    direction: if is_input { PortDirection::Input } else { PortDirection::Output },
+                                });
+                            }
+                        }
                     }
                 }
-            }
-            
-            // Only add if we have both type and direction
-            if (is_audio || is_cv) && (is_input || is_output) {
-                system_ports.push(Port {
-                    id: port_symbol,
-                    port_type: if is_audio { PortType::Audio } else { PortType::Midi },
-                    direction: if is_input { PortDirection::Input } else { PortDirection::Output },
-                });
             }
         }
         

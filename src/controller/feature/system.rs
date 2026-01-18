@@ -358,8 +358,19 @@ impl Feature for SystemFeature {
                            self.direction_name(), port_path);
                     
                     // Insert node in UI, using link from/to if available
+                    // Avoid chaining multiple input ports or multiple output ports
                     let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to)) = &element {
-                        (from.clone(), to.clone())
+                        match self.direction {
+                            SystemDirection::Input if from == "inputs" => {
+                                // Avoid chaining inputs → input → input
+                                ("inputs".to_string(), "outputs".to_string())
+                            }
+                            SystemDirection::Output if to == "outputs" => {
+                                // Avoid chaining output → output → outputs
+                                ("inputs".to_string(), "outputs".to_string())
+                            }
+                            _ => (from.clone(), to.clone())
+                        }
                     } else {
                         ("inputs".to_string(), "outputs".to_string())
                     };
