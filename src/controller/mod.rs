@@ -118,6 +118,7 @@ impl Controller {
         // Initialize persistence feature with auto-load flag
         let auto_load = !new_session; // auto_load is opposite of new_session
         controller.persistence_feature = Some(feature::new_persistence_feature(
+            Arc::clone(&controller.driver),
             engine.clone(),
             ui.clone(),
             auto_load,

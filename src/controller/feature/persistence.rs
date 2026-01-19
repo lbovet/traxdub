@@ -1,11 +1,12 @@
 use anyhow::Result;
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::sync::Arc;
 use std::fs;
 use std::path::PathBuf;
 use chrono::{Local, TimeZone};
 
 use crate::controller::{ControllerState, feature::Feature};
+use crate::controller::driver::{Driver, PortType};
 use crate::engine::Engine;
 use crate::ui::{Menu, MenuOption, UI};
 
@@ -19,6 +20,7 @@ enum PersistenceMenuState {
 
 /// Persistence feature for saving and loading engine state
 pub struct PersistenceFeature {
+    driver: Arc<Driver>,
     engine: Arc<Engine>,
     ui: Arc<UI>,
     menu_state: PersistenceMenuState,
@@ -27,8 +29,9 @@ pub struct PersistenceFeature {
 
 impl PersistenceFeature {
     /// Create a new persistence feature
-    pub fn new(engine: Arc<Engine>, ui: Arc<UI>, auto_load: bool) -> Self {
+    pub fn new(driver: Arc<Driver>, engine: Arc<Engine>, ui: Arc<UI>, auto_load: bool) -> Self {
         let mut feature = Self {
+            driver,
             engine,
             ui,
             menu_state: PersistenceMenuState::FileMenu,
@@ -261,19 +264,127 @@ impl PersistenceFeature {
         // Set engine state
         self.engine.set_raw_state(&state_data)?;
         
-        // Get the graph from engine and update UI
-        self.sync_ui_from_engine()?;
+        // Get the graph from engine
+        let graph = self.engine.get_graph()?;
+        
+        // Update UI with the graph
+        self.load_ui_graph(&graph)?;
+        
+        // Connect JACK ports for system ports
+        self.connect_system_ports(&graph)?;
         
         debug!("State loaded successfully");
         Ok(())
     }
     
-    /// Synchronize UI with engine graph
-    fn sync_ui_from_engine(&self) -> Result<()> {
-        debug!("Synchronizing UI with engine graph");
+    /// Connect JACK ports for system ports in the graph
+    fn connect_system_ports(&self, graph: &crate::engine::Graph) -> Result<()> {
+        debug!("Connecting system ports to JACK");
         
-        // Get current graph from engine
-        let graph = self.engine.get_graph()?;
+        // Get all sources and sinks from JACK
+        let audio_sources = self.driver.get_sources(PortType::Audio)?;
+        let audio_sinks = self.driver.get_sinks(PortType::Audio)?;
+        let midi_sources = self.driver.get_sources(PortType::Midi)?;
+        let midi_sinks = self.driver.get_sinks(PortType::Midi)?;
+        
+        // Process each system port in the graph
+        for port in &graph.ports {
+            // port.id is already sanitized, just extract the last segment
+            let sanitized_name = port.id.split('/').last().unwrap_or(&port.id);
+            
+            // Determine the port type for filtering
+            let driver_port_type = match port.port_type {
+                crate::engine::PortType::Audio => PortType::Audio,
+                crate::engine::PortType::Midi => PortType::Midi,
+            };
+            
+            // Match based on direction and type
+            match (&port.direction, driver_port_type) {
+                (crate::engine::PortDirection::Input, PortType::Audio) => {
+                    // Find matching audio source
+                    self.find_and_connect_source(&audio_sources, &sanitized_name, &port.id)?;
+                }
+                (crate::engine::PortDirection::Input, PortType::Midi) => {
+                    // Find matching MIDI source
+                    self.find_and_connect_source(&midi_sources, &sanitized_name, &port.id)?;
+                }
+                (crate::engine::PortDirection::Output, PortType::Audio) => {
+                    // Find matching audio sink
+                    self.find_and_connect_sink(&audio_sinks, &sanitized_name, &port.id)?;
+                }
+                (crate::engine::PortDirection::Output, PortType::Midi) => {
+                    // Find matching MIDI sink
+                    self.find_and_connect_sink(&midi_sinks, &sanitized_name, &port.id)?;
+                }
+                _ => {
+                    // PortType::All should not occur when converting from engine::PortType
+                    warn!("Unexpected port type combination for system port: {}", port.id);
+                }
+            }
+        }
+        
+        Ok(())
+    }
+    
+    /// Find and connect a source port
+    fn find_and_connect_source(&self, sources: &[crate::controller::driver::Source], sanitized_name: &str, system_port_id: &str) -> Result<()> {
+        for source in sources {
+            for port in &source.ports {
+                let port_sanitized = Driver::sanitize_port_name(&port.name);
+                if port_sanitized == sanitized_name {
+                    debug!("Connecting source {} to ingen system port {}", port.name, system_port_id);
+                    
+                    // Build the ingen port name with TraxDub prefix
+                    let ingen_port_name = format!("TraxDub Engine:{}", sanitized_name);
+                    
+                    // Create destination port struct
+                    let dest_port = crate::controller::driver::Port {
+                        name: ingen_port_name,
+                        short_name: sanitized_name.to_string(),
+                    };
+                    
+                    if let Err(e) = self.driver.connect_ports(port, &dest_port) {
+                        warn!("Failed to connect {} to {}: {}", port.name, system_port_id, e);
+                    }
+                    return Ok(());
+                }
+            }
+        }
+        debug!("No matching JACK source found for system port: {}", system_port_id);
+        Ok(())
+    }
+    
+    /// Find and connect a sink port
+    fn find_and_connect_sink(&self, sinks: &[crate::controller::driver::Sink], sanitized_name: &str, system_port_id: &str) -> Result<()> {
+        for sink in sinks {
+            for port in &sink.ports {
+                let port_sanitized = Driver::sanitize_port_name(&port.name);
+                if port_sanitized == sanitized_name {
+                    debug!("Connecting ingen system port {} to sink {}", system_port_id, port.name);
+                    
+                    // Build the ingen port name with TraxDub prefix
+                    let ingen_port_name = format!("TraxDub Engine:{}", sanitized_name);
+                    
+                    // Create source port struct
+                    let source_port = crate::controller::driver::Port {
+                        name: ingen_port_name,
+                        short_name: sanitized_name.to_string(),
+                    };
+                    
+                    if let Err(e) = self.driver.connect_ports(&source_port, port) {
+                        warn!("Failed to connect {} to {}: {}", system_port_id, port.name, e);
+                    }
+                    return Ok(());
+                }
+            }
+        }
+        debug!("No matching JACK sink found for system port: {}", system_port_id);
+        Ok(())
+    }
+    
+    /// Load UI graph from engine graph data
+    fn load_ui_graph(&self, graph: &crate::engine::Graph) -> Result<()> {
+        debug!("Loading UI graph from engine data");
         
         // Clear existing UI nodes and links (except system nodes)
         // Note: We should add a method to clear the UI, but for now we'll just add nodes
@@ -513,6 +624,6 @@ impl Feature for PersistenceFeature {
 }
 
 /// Helper to create a new persistence feature
-pub fn new_persistence_feature(engine: Arc<Engine>, ui: Arc<UI>, auto_load: bool) -> PersistenceFeature {
-    PersistenceFeature::new(engine, ui, auto_load)
+pub fn new_persistence_feature(driver: Arc<Driver>, engine: Arc<Engine>, ui: Arc<UI>, auto_load: bool) -> PersistenceFeature {
+    PersistenceFeature::new(driver, engine, ui, auto_load)
 }
