@@ -15,6 +15,7 @@ use super::{PortType, PortDirection};
 const INGEN_NS: &str = "http://drobilla.net/ns/ingen#";
 const LV2_NS: &str = "http://lv2plug.in/ns/lv2core#";
 const PATCH_NS: &str = "http://lv2plug.in/ns/ext/patch#";
+const ATOM_NS: &str = "http://lv2plug.in/ns/ext/atom#";
 
 // Global sequence number counter
 static SEQUENCE_NUMBER: AtomicU32 = AtomicU32::new(0);
@@ -56,6 +57,7 @@ impl IngenProtocol {
         let mut graph = FastGraph::new();
         let lv2 = Namespace::new(LV2_NS)?;
         let patch = Namespace::new(PATCH_NS)?;
+        let atom = Namespace::new(ATOM_NS)?;
         
         let port_path = format!("ingen:/main/{}", port_name);
         let subject = IriRef::new_unchecked(port_path.as_str());
@@ -68,12 +70,21 @@ impl IngenProtocol {
             IriRef::new_unchecked("http://www.w3.org/2001/XMLSchema#string".into())
         ))?;
         
-        let type_local = match port_type {
-            PortType::Audio => "AudioPort",
-            PortType::Midi => "CVPort", // Ingen uses CV ports for MIDI
+        // For MIDI ports, add atom:supports midi:MidiEvent and atom:bufferType atom:Sequence
+        if matches!(port_type, PortType::Midi) {
+            let atom = Namespace::new(ATOM_NS)?;
+            graph.insert(&body_node, &atom.get("supports")?, 
+                &IriRef::new_unchecked("http://lv2plug.in/ns/ext/midi#MidiEvent"))?;
+            graph.insert(&body_node, &atom.get("bufferType")?, 
+                &atom.get("Sequence")?)?;
+        }
+
+        let port_type = match port_type {
+            PortType::Audio => &lv2.get("AudioPort")?,
+            PortType::Midi => &atom.get("AtomPort")?, // MIDI uses AtomPort
         };
-        graph.insert(&body_node, &rdf::type_, &lv2.get(type_local)?)?;
-        
+        graph.insert(&body_node, &rdf::type_, port_type)?;
+               
         let direction_local = match direction {
             PortDirection::Input => "InputPort",
             PortDirection::Output => "OutputPort",
@@ -363,7 +374,8 @@ impl IngenProtocol {
         let lv2_symbol = lv2.get("symbol")?;
         let lv2_prototype = lv2.get("prototype")?;
         let lv2_audio_port = lv2.get("AudioPort")?;
-        let lv2_cv_port = lv2.get("CVPort")?;
+        let atom = Namespace::new(ATOM_NS)?;
+        let lv2_atom_port = atom.get("AtomPort")?;
         let lv2_input_port = lv2.get("InputPort")?;
         let lv2_output_port = lv2.get("OutputPort")?;
         let patch_put = patch.get("Put")?;
@@ -454,7 +466,7 @@ impl IngenProtocol {
                     if let (Some(port_uri), Some(body)) = (subject_uri, body_node) {
                         if port_uri.starts_with(&block_id) && port_uri != block_id {
                             let mut is_audio = false;
-                            let mut is_cv = false;
+                            let mut is_atom = false;
                             let mut is_input = false;
                             let mut is_output = false;
                             let mut port_symbol = port_uri.split('/').last().unwrap_or("").to_string();
@@ -466,8 +478,8 @@ impl IngenProtocol {
                                 if t.p() == &rdf::type_ {
                                     if t.o() == &lv2_audio_port {
                                         is_audio = true;
-                                    } else if t.o() == &lv2_cv_port {
-                                        is_cv = true;
+                                    } else if t.o() == &lv2_atom_port {
+                                        is_atom = true;
                                     } else if t.o() == &lv2_input_port {
                                         is_input = true;
                                     } else if t.o() == &lv2_output_port {
@@ -481,7 +493,7 @@ impl IngenProtocol {
                             }
                             
                             // Only add if we have both type and direction
-                            if (is_audio || is_cv) && (is_input || is_output) {
+                            if (is_audio || is_atom) && (is_input || is_output) {
                                 ports.push(Port {
                                     id: port_symbol,
                                     port_type: if is_audio { PortType::Audio } else { PortType::Midi },
@@ -588,7 +600,7 @@ impl IngenProtocol {
                         // System port: no slashes in the suffix (not a block or block port)
                         if !suffix.contains('/') {
                             let mut is_audio = false;
-                            let mut is_cv = false;
+                            let mut is_atom = false;
                             let mut is_input = false;
                             let mut is_output = false;
                             let mut port_name = suffix.to_string();
@@ -600,8 +612,8 @@ impl IngenProtocol {
                                 if t.p() == &rdf::type_ {
                                     if t.o() == &lv2_audio_port {
                                         is_audio = true;
-                                    } else if t.o() == &lv2_cv_port {
-                                        is_cv = true;
+                                    } else if t.o() == &lv2_atom_port {
+                                        is_atom = true;
                                     } else if t.o() == &lv2_input_port {
                                         is_input = true;
                                     } else if t.o() == &lv2_output_port {
@@ -619,7 +631,7 @@ impl IngenProtocol {
                             }
                             
                             // Only add if we have both type and direction
-                            if (is_audio || is_cv) && (is_input || is_output) {
+                            if (is_audio || is_atom) && (is_input || is_output) {
                                 system_ports.push(Port {
                                     id: port_name,
                                     port_type: if is_audio { PortType::Audio } else { PortType::Midi },

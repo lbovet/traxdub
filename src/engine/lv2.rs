@@ -98,9 +98,9 @@ impl Lv2World {
                 self.world,
                 b"http://lv2plug.in/ns/lv2core#AudioPort\0".as_ptr() as *const i8,
             );
-            let cv_class = lilv_sys::lilv_new_uri(
+            let atom_class = lilv_sys::lilv_new_uri(
                 self.world,
-                b"http://lv2plug.in/ns/lv2core#CVPort\0".as_ptr() as *const i8,
+                b"http://lv2plug.in/ns/ext/atom#AtomPort\0".as_ptr() as *const i8,
             );
             let control_class = lilv_sys::lilv_new_uri(
                 self.world,
@@ -132,18 +132,18 @@ impl Lv2World {
                 
                 // Determine port type
                 let is_audio = lilv_sys::lilv_port_is_a(plugin, port, audio_class);
-                let is_cv = lilv_sys::lilv_port_is_a(plugin, port, cv_class);
+                let is_atom = lilv_sys::lilv_port_is_a(plugin, port, atom_class);
                 let is_control = lilv_sys::lilv_port_is_a(plugin, port, control_class);
                 
-                // Skip control ports, only include audio and CV (MIDI) ports
+                // Skip control ports, only include audio and atom (MIDI) ports
                 if is_control {
                     continue;
                 }
                 
                 let port_type = if is_audio {
                     PortType::Audio
-                } else if is_cv {
-                    PortType::Midi // CV ports are used for MIDI in LV2
+                } else if is_atom {
+                    PortType::Midi // AtomPorts are used for MIDI in LV2
                 } else {
                     continue; // Skip other port types
                 };
@@ -159,7 +159,7 @@ impl Lv2World {
             lilv_sys::lilv_node_free(input_class);
             lilv_sys::lilv_node_free(output_class);
             lilv_sys::lilv_node_free(audio_class);
-            lilv_sys::lilv_node_free(cv_class);
+            lilv_sys::lilv_node_free(atom_class);
             lilv_sys::lilv_node_free(control_class);
         }
         
