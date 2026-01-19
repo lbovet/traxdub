@@ -197,9 +197,55 @@ impl Engine {
         }
     }
     
+    /// Drain any pending response data from the socket
+    fn drain_response(&self) -> Result<()> {
+        use std::io::Read;
+        
+        let mut socket_guard = self.socket.lock().unwrap();
+        if let Some(socket) = socket_guard.as_mut() {
+            // Set non-blocking mode with minimal timeout
+            socket.set_read_timeout(Some(Duration::from_millis(1)))
+                .map_err(|e| anyhow!("Failed to set read timeout: {}", e))?;
+            
+            let mut drain_buf = [0u8; 4096];
+            let mut total_drained = 0;
+            
+            // Keep reading and discarding bytes until none are available
+            loop {
+                match socket.read(&mut drain_buf) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        total_drained += n;
+                        // Continue draining
+                    }
+                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || 
+                              e.kind() == std::io::ErrorKind::TimedOut => {
+                        // No more data available
+                        break;
+                    }
+                    Err(e) => return Err(anyhow!("Failed to drain socket: {}", e)),
+                }
+            }
+            
+            if total_drained > 0 {
+                debug!("Drained {} bytes from response stream", total_drained);
+            }
+            
+            // Clear the read buffer as well
+            self.read_buffer.lock().unwrap().clear();
+            
+            Ok(())
+        } else {
+            Err(anyhow!("Not connected to Ingen socket"))
+        }
+    }
+    
     /// Send a message to Ingen via the Unix socket
     fn send_message(&self, message: &str) -> Result<()> {
-        debug!("Sending message to Ingen: {}", message);        
+        debug!("Sending message to Ingen: {}", message);
+        
+        // Drain any pending responses before sending new message
+        self.drain_response()?;
 
         let mut socket_guard = self.socket.lock().unwrap();
         if let Some(socket) = socket_guard.as_mut() {
@@ -422,7 +468,6 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
-        self.receive_message()?; // Drain response
         
         Ok(())
     }
@@ -453,7 +498,6 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
-        self.receive_message()?; // Drain response
 
         Ok(())
     }
@@ -467,7 +511,6 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
-        self.receive_message()?; // Drain response
 
         Ok(())
     }
@@ -481,7 +524,6 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
-        self.receive_message()?; // Drain response
 
         // Return the port path
         Ok(format!("ingen:/main/{}", port_name))
@@ -496,7 +538,6 @@ impl Engine {
         
         // Send to Ingen
         self.send_message(&message)?;
-        self.receive_message()?; // Drain response
 
         // Return the port path
         Ok(format!("ingen:/main/{}", port_name))
@@ -524,7 +565,6 @@ impl Engine {
         
         // Send data diretly to Ingen
         self.send_message(state_data)?;
-        self.receive_message()?; // Drain response
         
         Ok(())
     }
