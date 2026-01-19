@@ -329,23 +329,27 @@ impl Feature for SystemFeature {
                     debug!("Successfully created and connected {} port: {}", 
                            self.direction_name(), port_path);
                     
-                    // Insert node in UI, using link from/to if available
-                    // Avoid chaining multiple input ports or multiple output ports
+                    // Insert port node in UI, using link from/to if available
                     let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to)) = &element {
                         (from.clone(), to.clone())
                     } else {
                         ("inputs".to_string(), "outputs".to_string())
                     };
-                    
+
+                    let port_type = match self.direction {
+                        SystemDirection::Input => NodeType::PortIn,
+                        SystemDirection::Output => NodeType::PortOut,
+                    };
+
                     self.ui.insert_node(
                         port_path.clone(),
                         port_name.split(':').last().unwrap_or(port_name).to_string(),
-                        NodeType::Normal,
+                        port_type,
                         link_from.clone(),
                         link_to.clone(),
                     )?;
                     
-                    // Create connections in the engine (skip "inputs" and "outputs" system nodes)
+                    // Create connections in the engine (skip "inputs" and "outputs" context nodes)
                     if link_from != "inputs" {
                         debug!("Creating engine connection: {} -> {}", link_from, port_path);
                         self.engine.connect(&link_from, &port_path)?;

@@ -31,8 +31,10 @@ pub enum Element {
 /// Node type
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NodeType {
-    Normal,
-    System,
+    Normal, 
+    PortIn,
+    PortOut,   
+    Context,
 }
 
 /// UI node
@@ -110,7 +112,7 @@ impl UI {
         };
         
         // Set focus to the new node if navigable (check before moving)
-        let should_focus = node.node_type == NodeType::Normal;
+        let should_focus = node.node_type != NodeType::Context;
         
         self.nodes.lock().unwrap().insert(id.clone(), node);
         
@@ -145,7 +147,7 @@ impl UI {
     pub fn create_link(&self, from_id: String, to_id: String) -> Result<()> {
         debug!("Creating link: {} -> {}", from_id, to_id);
         
-        // Verify both nodes exist and check if they are system nodes
+        // Verify both nodes exist and check if they are context nodes
         let nodes = self.nodes.lock().unwrap();
         if !nodes.contains_key(&from_id) {
             return Err(anyhow::anyhow!("Source node not found: {}", from_id));
@@ -154,15 +156,15 @@ impl UI {
             return Err(anyhow::anyhow!("Destination node not found: {}", to_id));
         }
         
-        let from_is_system = nodes.get(&from_id).map(|n| n.node_type == NodeType::System).unwrap_or(false);
-        let to_is_system = nodes.get(&to_id).map(|n| n.node_type == NodeType::System).unwrap_or(false);
+        let from_is_context = nodes.get(&from_id).map(|n| n.node_type == NodeType::Context).unwrap_or(false);
+        let to_is_context = nodes.get(&to_id).map(|n| n.node_type == NodeType::Context).unwrap_or(false);
         drop(nodes);
         
         // Get and increment order counter
         let mut order_counter = self.order_counter.lock().unwrap();
         *order_counter += 1;
-        let link_order = if from_is_system && to_is_system {
-            // Links between system nodes get maximum order value
+        let link_order = if from_is_context && to_is_context {
+            // Links between context nodes get maximum order value
             i64::MAX
         } else {
             *order_counter
@@ -407,24 +409,24 @@ impl UI {
                         
                         match direction {
                             KnobDirection::Forward => {
-                                // Move to destination node, but skip system nodes
+                                // Move to destination node, but skip context nodes
                                 if let Some(node) = nodes.get(&to_id) {
-                                    if node.node_type != NodeType::System {
+                                    if node.node_type != NodeType::Context {
                                         trace!("Navigating from link {} -> {} to node {}", from_id, to_id, to_id);
                                         *focused = Some(Element::Node(to_id.clone()));
                                     } else {
-                                        trace!("Skipping system node {} during navigation", to_id);
+                                        trace!("Skipping context node {} during navigation", to_id);
                                     }
                                 }
                             }
                             KnobDirection::Backward => {
-                                // Move to source node, but skip system nodes
+                                // Move to source node, but skip context nodes
                                 if let Some(node) = nodes.get(&from_id) {
-                                    if node.node_type != NodeType::System {
+                                    if node.node_type != NodeType::Context {
                                         trace!("Navigating from link {} -> {} to node {}", from_id, to_id, from_id);
                                         *focused = Some(Element::Node(from_id.clone()));
                                     } else {
-                                        trace!("Skipping system node {} during navigation", from_id);
+                                        trace!("Skipping context node {} during navigation", from_id);
                                     }
                                 }
                             }
@@ -486,13 +488,13 @@ impl UI {
                             if let Some(sibling_link) = Self::find_sibling_link(&sibling_links, current_order, &direction) {
                                 let target_node = &sibling_link.to_id;
                                 
-                                // Check if target node is a system node - skip if it is
+                                // Check if target node is a context node - skip if it is
                                 if let Some(node) = nodes.get(target_node) {
-                                    if node.node_type != NodeType::System {
+                                    if node.node_type != NodeType::Context {
                                         trace!("Navigating from node {} via sibling link to node {}", node_id, target_node);
                                         *focused = Some(Element::Node(target_node.clone()));
                                     } else {
-                                        trace!("Skipping system node {} during secondary navigation", target_node);
+                                        trace!("Skipping context node {} during secondary navigation", target_node);
                                     }
                                 }
                             }

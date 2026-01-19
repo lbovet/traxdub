@@ -406,10 +406,15 @@ impl PersistenceFeature {
             
             let port_node_id = format!("ingen:/main/{}", port.id);
             
+            let port_type = match port.direction {
+                crate::engine::PortDirection::Input => crate::ui::NodeType::PortIn,
+                crate::engine::PortDirection::Output => crate::ui::NodeType::PortOut,
+            };
+
             self.ui.create_node(
                 port_node_id.clone(),
                 port.id.clone(),
-                crate::ui::NodeType::System,
+                port_type
             )?;
             
             // Link system port to its corresponding system node
