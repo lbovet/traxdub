@@ -66,6 +66,7 @@ pub enum ControllerState {
 pub struct Controller {
     ui: Arc<UI>,
     engine: Arc<Engine>,
+    driver: Arc<driver::Driver>,
     state: ControllerState,
     base_control_config: Option<BaseControlConfig>,
     config_path: PathBuf,
@@ -86,9 +87,13 @@ impl Controller {
     pub fn new(ui: Arc<UI>, engine: Arc<Engine>, force_init: bool, new_session: bool) -> Result<Self> {
         let config_path = Self::get_config_path();
         
+        // Create JACK driver
+        let driver = Arc::new(driver::Driver::new()?);
+        
         let mut controller = Self {
             ui: ui.clone(),
             engine: engine.clone(),
+            driver,
             state: ControllerState::Initializing,
             base_control_config: None,
             config_path,
@@ -111,10 +116,31 @@ impl Controller {
         controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
         
         // Initialize persistence feature with auto-load flag
+        let auto_load = !new_session; // auto_load is opposite of new_session
         controller.persistence_feature = Some(feature::new_persistence_feature(
-            engine,
-            ui,
-            !new_session, // auto_load is opposite of new_session
+            engine.clone(),
+            ui.clone(),
+            auto_load,
+        ));
+        
+        // Initialize input feature with driver and engine
+        controller.input_feature = Some(feature::new_input_feature(
+            Arc::clone(&controller.driver),
+            Arc::clone(&engine),
+            Arc::clone(&ui),
+        ));
+        
+        // Initialize output feature with driver and engine
+        controller.output_feature = Some(feature::new_output_feature(
+            Arc::clone(&controller.driver),
+            Arc::clone(&engine),
+            Arc::clone(&ui),
+        ));
+        
+        // Initialize plugin feature
+        controller.plugin_feature = Some(feature::new_plugin_feature(
+            Arc::clone(&engine),
+            Arc::clone(&ui),
         ));
         
         Ok(controller)
@@ -392,33 +418,12 @@ impl Controller {
     pub fn run_until_signal(&mut self, running: Arc<AtomicBool>) -> Result<()> {
         debug!("Controller running in state: {:?}", self.state);
         
-        // Start MIDI receiver and get the event channel        
-        let (driver, event_receiver) = driver::Driver::start()?;
-        let driver = Arc::new(driver);
+        // Start MIDI receiver and get the event channel
+        let event_receiver = self.driver.start()?;
         
-        driver.connect_all_midi_inputs()?;
+        self.driver.connect_all_midi_inputs()?;
         
-        // Initialize input feature with driver and engine
-        self.input_feature = Some(feature::new_input_feature(
-            Arc::clone(&driver),
-            Arc::clone(&self.engine),
-            Arc::clone(&self.ui),
-        ));
-        
-        // Initialize output feature with driver and engine
-        self.output_feature = Some(feature::new_output_feature(
-            Arc::clone(&driver),
-            Arc::clone(&self.engine),
-            Arc::clone(&self.ui),
-        ));
-        
-        // Initialize plugin feature
-        self.plugin_feature = Some(feature::new_plugin_feature(
-            Arc::clone(&self.engine),
-            Arc::clone(&self.ui),
-        ));
-        
-        // Note: persistence_feature is already initialized in Controller::new()
+        // Note: All features are initialized in Controller::new()
         
         // Process events from the receiver until signal
         while running.load(Ordering::SeqCst) {
@@ -440,8 +445,7 @@ impl Controller {
         }
         
         debug!("Controller shutting down gracefully");
-        drop(driver);
-        debug!("MIDI receiver dropped");
+        debug!("MIDI receiver stopped");
         Ok(())
     }
 }

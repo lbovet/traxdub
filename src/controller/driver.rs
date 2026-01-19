@@ -158,15 +158,57 @@ pub struct Driver {
 }
 
 impl Driver {
+    /// Sanitize port name for engine use
+    /// Converts to lowercase and replaces sequences of special chars with single underscore
+    pub fn sanitize_port_name(name: &str) -> String {
+        let mut result = String::new();
+        let mut last_was_special = false;
+        
+        for c in name.chars() {
+            if c.is_alphanumeric() {
+                result.push(c.to_lowercase().next().unwrap());
+                last_was_special = false;
+            } else {
+                if !last_was_special && !result.is_empty() {
+                    result.push('_');
+                }
+                last_was_special = true;
+            }
+        }
+        
+        // Remove trailing underscore if any
+        if result.ends_with('_') {
+            result.pop();
+        }
+        
+        result
+    }
+
+    /// Create a new JACK driver instance
+    pub fn new() -> Result<Self> {
+        debug!("Initializing JACK driver...");
+
+        // Create a JACK client for port queries
+        let (query_client, _status) = Client::new("TraxDub Query", ClientOptions::NO_START_SERVER)
+            .map_err(|e| anyhow::anyhow!("Failed to create JACK query client: {}", e))?;
+
+        debug!("JACK query client created: {}", query_client.name());
+
+        let client_storage = Arc::new(Mutex::new(Some(query_client)));
+        let shutdown_flag = Arc::new(AtomicBool::new(false));
+
+        Ok(Self {
+            _active_client_handle: shutdown_flag,
+            client: client_storage,
+        })
+    }
+
     /// Start receiving MIDI events from JACK and return the receiver channel
-    pub fn start() -> Result<(Self, Receiver<MidiEvent>)> {
-        debug!("Initializing JACK MIDI client...");
+    pub fn start(&self) -> Result<Receiver<MidiEvent>> {
+        debug!("Starting JACK MIDI receiver...");
 
         let (event_sender, event_receiver) = channel();
-        let shutdown_flag = Arc::new(AtomicBool::new(false));
-        let shutdown_flag_clone = shutdown_flag.clone();
-        let client_storage = Arc::new(Mutex::new(None));
-        let client_storage_clone = client_storage.clone();
+        let shutdown_flag = Arc::clone(&self._active_client_handle);
 
         // Spawn a thread to keep the JACK client alive
         std::thread::spawn(move || {
@@ -203,25 +245,15 @@ impl Driver {
 
             let process_handler = ClosureProcessHandler::new(process_callback);
 
-            // Store client before activation
-            // Note: We can't store the client after activation since activate_async consumes it
-            // So we'll use a different approach - create a second client for queries
-            
             // Activate the client
             let active_client = client
                 .activate_async((), process_handler)
                 .expect("Failed to activate JACK client");
 
-            debug!("JACK client activated");            
-
-
-            // Create a separate client for port queries
-            if let Ok((query_client, _)) = Client::new("TraxDub Query", ClientOptions::NO_START_SERVER) {
-                *client_storage_clone.lock().unwrap() = Some(query_client);
-            }
+            debug!("JACK client activated");
 
             // Keep the thread alive to maintain the JACK connection
-            while !shutdown_flag_clone.load(Ordering::SeqCst) {
+            while !shutdown_flag.load(Ordering::SeqCst) {
                 std::thread::sleep(std::time::Duration::from_millis(100));
             }
             
@@ -232,10 +264,7 @@ impl Driver {
         // Give the thread a moment to start
         std::thread::sleep(std::time::Duration::from_millis(100));
 
-        Ok((Self { 
-            _active_client_handle: shutdown_flag,
-            client: client_storage,
-        }, event_receiver))
+        Ok(event_receiver)
     }
 
     /// Get all JACK clients that provide input ports (sources)

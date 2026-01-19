@@ -77,34 +77,6 @@ impl SystemFeature {
         }
     }
 
-    /// Sanitize port name for engine use
-    /// Converts to lowercase and replaces sequences of special chars with single underscore
-    fn sanitize_port_name(name: &str) -> String {
-        let mut result = String::new();
-        let mut last_was_special = false;
-        
-        for c in name.chars() {
-            if c.is_alphanumeric() {
-                result.push(c.to_lowercase().next().unwrap());
-                last_was_special = false;
-            } else {
-                if !last_was_special && !result.is_empty() {
-                    result.push('_');
-                }
-                last_was_special = true;
-            }
-        }
-        
-        // Remove trailing underscore if any
-        if result.ends_with('_') {
-            result.pop();
-        }
-        
-        result
-    }
-
-
-
     /// Get the port type selection menu
     fn get_port_type_menu(&self) -> Menu {
         Menu {
@@ -274,7 +246,7 @@ impl Feature for SystemFeature {
                            port_name, self.endpoint_type_name(), endpoint_name);
                     
                     // Sanitize the port name
-                    let sanitized_name = Self::sanitize_port_name(port_name);
+                    let sanitized_name = Driver::sanitize_port_name(port_name);
                     debug!("Sanitized port name: {}", sanitized_name);
                     
                     // Convert PortType from driver to engine
@@ -360,17 +332,7 @@ impl Feature for SystemFeature {
                     // Insert node in UI, using link from/to if available
                     // Avoid chaining multiple input ports or multiple output ports
                     let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to)) = &element {
-                        match self.direction {
-                            SystemDirection::Input if from == "inputs" => {
-                                // Avoid chaining inputs → input → input
-                                ("inputs".to_string(), "outputs".to_string())
-                            }
-                            SystemDirection::Output if to == "outputs" => {
-                                // Avoid chaining output → output → outputs
-                                ("inputs".to_string(), "outputs".to_string())
-                            }
-                            _ => (from.clone(), to.clone())
-                        }
+                        (from.clone(), to.clone())
                     } else {
                         ("inputs".to_string(), "outputs".to_string())
                     };
