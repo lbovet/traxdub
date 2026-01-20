@@ -420,14 +420,14 @@ impl PersistenceFeature {
             // Link system port to its corresponding system node
             match port.direction {
                 crate::engine::PortDirection::Input => {
-                    // Input ports connect from "inputs" to the port
-                    if let Err(e) = self.ui.create_link("inputs".to_string(), port_node_id) {
+                    // Input ports connect from "inputs" to the port (Context -> PortIn => PortIn)
+                    if let Err(e) = self.ui.create_link("inputs".to_string(), port_node_id, crate::ui::LinkType::PortIn) {
                         debug!("Failed to create link from inputs to {}: {}", port.id, e);
                     }
                 }
                 crate::engine::PortDirection::Output => {
-                    // Output ports connect from the port to "outputs"
-                    if let Err(e) = self.ui.create_link(port_node_id, "outputs".to_string()) {
+                    // Output ports connect from the port to "outputs" (PortOut -> Context => PortOut)
+                    if let Err(e) = self.ui.create_link(port_node_id, "outputs".to_string(), crate::ui::LinkType::PortOut) {
                         debug!("Failed to create link from {} to outputs: {}", port.id, e);
                     }
                 }
@@ -445,7 +445,8 @@ impl PersistenceFeature {
             
             // Only create link if we haven't already
             // Note: create_link should handle duplicates gracefully
-            if let Err(e) = self.ui.create_link(from_id, to_id) {
+            // For connections between blocks, use Normal link type
+            if let Err(e) = self.ui.create_link(from_id, to_id, crate::ui::LinkType::Normal) {
                 debug!("Link creation failed (may already exist): {}", e);
             }
         }

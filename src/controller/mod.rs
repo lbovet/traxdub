@@ -113,7 +113,8 @@ impl Controller {
         // Create initial context nodes in UI
         controller.ui.create_node("inputs".to_string(), "Inputs".to_string(), crate::ui::NodeType::Context)?;
         controller.ui.create_node("outputs".to_string(), "Outputs".to_string(), crate::ui::NodeType::Context)?;
-        controller.ui.create_link("inputs".to_string(), "outputs".to_string())?;
+        // Context -> Context => Virtual
+        controller.ui.create_link("inputs".to_string(), "outputs".to_string(), crate::ui::LinkType::Virtual)?;
         
         // Initialize persistence feature with auto-load flag
         let auto_load = !new_session; // auto_load is opposite of new_session

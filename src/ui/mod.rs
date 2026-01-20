@@ -37,6 +37,15 @@ pub enum NodeType {
     Context,
 }
 
+/// Link type
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LinkType {
+    Normal,
+    PortIn,
+    PortOut,
+    Virtual,
+}
+
 /// UI node
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -52,6 +61,7 @@ pub struct Link {
     pub to_id: String,
     pub visited_last: i64,
     pub order: i64,
+    pub link_type: LinkType,
 }
 
 // Implement PartialEq to only compare from_id and to_id (not visited_last or order)
@@ -144,8 +154,8 @@ impl UI {
     }
 
     /// Create a link between two nodes
-    pub fn create_link(&self, from_id: String, to_id: String) -> Result<()> {
-        debug!("Creating link: {} -> {}", from_id, to_id);
+    pub fn create_link(&self, from_id: String, to_id: String, link_type: LinkType) -> Result<()> {
+        debug!("Creating link: {} -> {} (type: {:?})", from_id, to_id, link_type);
         
         // Verify both nodes exist and check if they are context nodes
         let nodes = self.nodes.lock().unwrap();
@@ -176,6 +186,7 @@ impl UI {
             to_id: to_id.clone(),
             visited_last: -link_order,
             order: link_order,
+            link_type,
         };
         self.links.lock().unwrap().insert(link);
         
@@ -204,11 +215,20 @@ impl UI {
         debug!("Inserting node {} between {} and {}", node_id, link_from, link_to);
         
         // Create the new node
-        self.create_node(node_id.clone(), node_name, node_type)?;
+        self.create_node(node_id.clone(), node_name, node_type.clone())?;
+        
+        // Calculate link types based on node types
+        let nodes = self.nodes.lock().unwrap();
+        let from_node_type = nodes.get(&link_from).map(|n| n.node_type.clone());
+        let to_node_type = nodes.get(&link_to).map(|n| n.node_type.clone());
+        drop(nodes);
+        
+        let link1_type = Self::calculate_link_type(from_node_type.as_ref(), Some(&node_type));
+        let link2_type = Self::calculate_link_type(Some(&node_type), to_node_type.as_ref());
         
         // Create links
-        self.create_link(link_from.clone(), node_id.clone())?;
-        self.create_link(node_id, link_to.clone())?;
+        self.create_link(link_from.clone(), node_id.clone(), link1_type)?;
+        self.create_link(node_id, link_to.clone(), link2_type)?;
         
         // Remove the original link, unless it connects inputs to outputs
         if !(link_from == "inputs" && link_to == "outputs") {
@@ -227,6 +247,7 @@ impl UI {
             to_id: to_id.to_string(),
             visited_last: 0, // Value doesn't matter for lookup since Hash/Eq ignore it
             order: 0, // Value doesn't matter for lookup since Hash/Eq ignore it
+            link_type: LinkType::Normal, // Value doesn't matter for lookup since Hash/Eq ignore it
         };
         
         if self.links.lock().unwrap().remove(&link) {
@@ -713,6 +734,26 @@ impl UI {
         println!("(This will be used for going back in menus)");
         println!("-------------------------------------------------");
         Ok(())
+    }
+
+    /// Calculate link type based on source and destination node types
+    fn calculate_link_type(from_type: Option<&NodeType>, to_type: Option<&NodeType>) -> LinkType {
+        match (from_type, to_type) {
+            // Context -> Context => Virtual
+            (Some(NodeType::Context), Some(NodeType::Context)) => LinkType::Virtual,
+            // Context -> PortIn Node => PortIn
+            (Some(NodeType::Context), Some(NodeType::PortIn)) => LinkType::PortIn,
+            // PortOut Node -> Context => PortOut
+            (Some(NodeType::PortOut), Some(NodeType::Context)) => LinkType::PortOut,
+            // Non-PortOut Node -> Context => Virtual
+            (Some(NodeType::Normal), Some(NodeType::Context)) |
+            (Some(NodeType::PortIn), Some(NodeType::Context)) => LinkType::Virtual,
+            // Context -> Non-PortIn Node => Virtual
+            (Some(NodeType::Context), Some(NodeType::Normal)) |
+            (Some(NodeType::Context), Some(NodeType::PortOut)) => LinkType::Virtual,
+            // Other cases: Normal
+            _ => LinkType::Normal,
+        }
     }
 
     /// Set the current session name (mnemonic)
