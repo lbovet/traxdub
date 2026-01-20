@@ -215,7 +215,7 @@ impl Controller {
                         // Store the selected element for use by features
                         self.current_element = Some(element.clone());
                                                
-                        if let crate::ui::Element::Link(ref from_id, ref to_id) = element {
+                        if let crate::ui::Element::Link(ref from_id, ref to_id, _) = element {
                             // Build menu options based on link endpoints
                             let mut options = Vec::new();
                             

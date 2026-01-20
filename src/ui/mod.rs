@@ -24,7 +24,7 @@ pub struct Menu {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Element {
     Node(String),
-    Link(String, String),
+    Link(String, String, LinkType), // (from_id, to_id, link_type)
     MenuOption(String, String), // (menu_id, option_id)
 }
 
@@ -186,14 +186,14 @@ impl UI {
             to_id: to_id.clone(),
             visited_last: -link_order,
             order: link_order,
-            link_type,
+            link_type: link_type.clone(),
         };
         self.links.lock().unwrap().insert(link);
         
         // Focus the new link if nothing is focused yet
         let mut focused = self.focused_element.lock().unwrap();
         if focused.is_none() {
-            *focused = Some(Element::Link(from_id, to_id));
+            *focused = Some(Element::Link(from_id, to_id, link_type));
         }
         drop(focused);
         
@@ -300,7 +300,7 @@ impl UI {
             if !from_links.is_empty() {
                 for link in from_links {
                     // Check if this link is focused
-                    let link_focus_marker = if let Some(Element::Link(ref from, ref to)) = *focused {
+                    let link_focus_marker = if let Some(Element::Link(ref from, ref to, _)) = *focused {
                         if from == &link.from_id && to == &link.to_id { " [*]" } else { "" }
                     } else {
                         ""
@@ -394,7 +394,7 @@ impl UI {
                                     trace!("Navigating from node {} to link {} -> {} (visit={})", 
                                            current_node_id, updated_link.from_id, updated_link.to_id, updated_link.visited_last);
                                     
-                                    *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone()));
+                                    *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone(), updated_link.link_type.clone()));
 
                                     links_mut.insert(updated_link);
                                 }
@@ -417,14 +417,14 @@ impl UI {
                                     trace!("Navigating from node {} to link {} -> {} (visit={})", 
                                            current_node_id, updated_link.from_id, updated_link.to_id, updated_link.visited_last);
                                     
-                                    *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone()));
+                                    *focused = Some(Element::Link(updated_link.from_id.clone(), updated_link.to_id.clone(), updated_link.link_type.clone()));
                                     
                                     links_mut.insert(updated_link);
                                 }
                             }
                         }
                     }
-                    Some(Element::Link(from_id, to_id)) => {
+                    Some(Element::Link(from_id, to_id, _)) => {
                         // Navigate from a link to a node
                         let nodes = self.nodes.lock().unwrap();
                         
@@ -467,7 +467,7 @@ impl UI {
                 let current_focus = focused.clone();
                 
                 match current_focus {
-                    Some(Element::Link(from_id, to_id)) => {
+                    Some(Element::Link(from_id, to_id, _)) => {
                         // Navigate between links with the same from_id
                         let links = self.links.lock().unwrap();
                         
@@ -483,7 +483,7 @@ impl UI {
                             if let Some(link) = Self::find_sibling_link(&sibling_links, current_order, &direction) {
                                 trace!("Navigating from link {}→{} (order={}) to link {}→{} (order={})",
                                        from_id, to_id, current_order, link.from_id, link.to_id, link.order);
-                                *focused = Some(Element::Link(link.from_id.clone(), link.to_id.clone()));
+                                *focused = Some(Element::Link(link.from_id.clone(), link.to_id.clone(), link.link_type.clone()));
                             } 
                         }
                     }
@@ -589,8 +589,8 @@ impl UI {
                 Element::Node(id) => {
                     println!("[UI] Selected node: {}", id);
                 }
-                Element::Link(from_id, to_id) => {
-                    println!("[UI] Selected link: {} → {}", from_id, to_id);
+                Element::Link(from_id, to_id, link_type) => {
+                    println!("[UI] Selected link: {} → {} (type: {:?})", from_id, to_id, link_type);
                 }
                 Element::MenuOption(menu_id, option_id) => {
                     println!("[UI] Selected menu option: {} from menu {}", option_id, menu_id);

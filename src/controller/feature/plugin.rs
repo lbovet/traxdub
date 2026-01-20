@@ -74,7 +74,7 @@ impl Feature for PluginFeature {
         debug!("Plugin feature handling plugin selection: {}", plugin_uri);
         
         // Extract link information from stored element
-        let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to)) = &self.ui_element {
+        let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to, _)) = &self.ui_element {
             (from.clone(), to.clone())
         } else {
             return Err(anyhow::anyhow!("Plugin feature requires a link element"));

@@ -329,16 +329,23 @@ impl Feature for SystemFeature {
                     debug!("Successfully created and connected {} port: {}", 
                            self.direction_name(), port_path);
                     
-                    // Insert port node in UI, using link from/to if available
-                    let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to)) = &element {
-                        (from.clone(), to.clone())
-                    } else {
-                        ("inputs".to_string(), "outputs".to_string())
-                    };
-
                     let port_type = match self.direction {
                         SystemDirection::Input => NodeType::PortIn,
                         SystemDirection::Output => NodeType::PortOut,
+                    };
+
+                    // Insert port node in UI, using link from/to if available
+                    // If the selected link type is PortIn or PortOut, use "inputs" and "outputs"
+                    // to avoid chaining PortIn nodes or PortOut nodes
+                    let (link_from, link_to) = if let Some(crate::ui::Element::Link(from, to, link_type)) = &element {
+                        // If link type is PortIn or PortOut, use inputs/outputs to avoid chaining
+                        if matches!(link_type, crate::ui::LinkType::PortIn | crate::ui::LinkType::PortOut) {
+                            ("inputs".to_string(), "outputs".to_string())
+                        } else {
+                            (from.clone(), to.clone())
+                        }
+                    } else {
+                        ("inputs".to_string(), "outputs".to_string())
                     };
 
                     self.ui.insert_node(
