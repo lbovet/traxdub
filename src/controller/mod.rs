@@ -82,6 +82,10 @@ pub struct Controller {
     current_element: Option<crate::ui::Element>,
 }
 
+// Mark Controller as Send - the raw pointer is only used within the controller's methods
+// and never sent across threads
+unsafe impl Send for Controller {}
+
 impl Controller {
     /// Create a new controller instance
     pub fn new(ui: Arc<UI>, engine: Arc<Engine>, force_init: bool, new_session: bool) -> Result<Self> {

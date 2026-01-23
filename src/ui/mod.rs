@@ -1,3 +1,5 @@
+pub mod window;
+
 use anyhow::Result;
 use log::{debug, trace};
 use std::collections::{HashMap, HashSet};

@@ -48,8 +48,25 @@ fn main() -> Result<()> {
     
     debug!("TraxDub initialized");
     
-    // Run the controller with graceful shutdown
-    let result = controller.run_until_signal(running);
+    // Use scoped threads to avoid Send requirement
+    let result = std::thread::scope(|s| {
+        // Start the controller in a background thread
+        let controller_running = running.clone();
+        let controller_handle = s.spawn(move || {
+            controller.run_until_signal(controller_running)
+        });
+        
+        // Run the UI window on the main thread (required for most platforms)
+        let ui_result = ui::window::run();
+        
+        // Wait for controller to finish
+        let controller_result = controller_handle.join()
+            .unwrap_or_else(|e| Err(anyhow::anyhow!("Controller thread panicked: {:?}", e)));
+        
+        // Return the first error if any occurred
+        ui_result?;
+        controller_result
+    });
     
     // Explicitly drop engine to ensure clean shutdown
     debug!("Dropping engine...");
