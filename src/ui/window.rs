@@ -34,7 +34,7 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
     let _ = PROXY.set(proxy);
     let window = WindowBuilder::new()
         .with_title("TraxDub")
-        .with_inner_size(LogicalSize::new(800.0, 600.0))
+        .with_inner_size(LogicalSize::new(800.0, 600.0))        
         .build(&event_loop)?;
 
     let html = r#"<!DOCTYPE html>
@@ -107,6 +107,7 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                window.set_visible(false);
                 running.store(false, Ordering::SeqCst);
             }
             _ => {}
