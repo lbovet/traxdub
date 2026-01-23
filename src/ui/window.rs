@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock, atomic::{AtomicBool, Ordering}};
 use tao::event_loop::EventLoopProxy;
 
 #[derive(Debug, Clone)]
@@ -18,7 +18,7 @@ pub fn close() -> Result<()> {
 }
 
 /// Create and run the UI window  
-pub fn run() -> Result<()> {
+pub fn run(running: Arc<AtomicBool>) -> Result<()> {
     use wry::{
         dpi::LogicalSize,
         WebViewBuilder,
@@ -107,7 +107,7 @@ pub fn run() -> Result<()> {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
-                *control_flow = ControlFlow::Exit;
+                running.store(false, Ordering::SeqCst);
             }
             _ => {}
         }

@@ -45,7 +45,6 @@ fn main() -> Result<()> {
     ctrlc::set_handler(move || {
         info!("Received Ctrl-C, shutting down");
         r.store(false, Ordering::SeqCst);
-        let _ = ui::window::close();
     })?;
 
     debug!("TraxDub initialized");
@@ -54,25 +53,24 @@ fn main() -> Result<()> {
     let result = std::thread::scope(|s| {
         // Start the controller in a background thread
         let controller_running = running.clone();
-        let controller_handle = s.spawn(move || {
-            controller.run_until_signal(controller_running)
+        s.spawn(move || {
+            let _ = controller.run_until_signal(controller_running);
+
+            // Explicitly drop engine to ensure clean shutdown
+            debug!("Dropping engine...");
+            drop(engine);            
+
+            // Close the UI
+            debug!("Closing UI...");
+            let _ = ui::window::close();
         });
         
         // Run the UI window on the main thread (required for most platforms)
-        let ui_result = ui::window::run();
+        let ui_result = ui::window::run(running.clone());
 
-        // Wait for controller to finish
-        let controller_result = controller_handle.join()
-            .unwrap_or_else(|e| Err(anyhow::anyhow!("Controller thread panicked: {:?}", e)));
-        
         // Return the first error if any occurred
-        ui_result?;
-        controller_result
+        ui_result
     });
-    
-    // Explicitly drop engine to ensure clean shutdown
-    debug!("Dropping engine...");
-    drop(engine);
     
     result
 }
