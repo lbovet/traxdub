@@ -1,4 +1,21 @@
 use anyhow::Result;
+use std::sync::OnceLock;
+use tao::event_loop::EventLoopProxy;
+
+#[derive(Debug, Clone)]
+pub enum UserEvent {
+    Quit,
+}
+
+static PROXY: OnceLock<EventLoopProxy<UserEvent>> = OnceLock::new();
+
+pub fn close() -> Result<()> {
+    if let Some(proxy) = PROXY.get() {
+        proxy.send_event(UserEvent::Quit)
+            .map_err(|e| anyhow::anyhow!("Failed to send quit event: {:?}", e))?;
+    }
+    Ok(())
+}
 
 /// Create and run the UI window  
 pub fn run() -> Result<()> {
@@ -8,11 +25,13 @@ pub fn run() -> Result<()> {
     };
     use tao::{
         event::{Event, WindowEvent},
-        event_loop::{ControlFlow, EventLoop},
+        event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
         window::WindowBuilder,
     };
 
-    let event_loop = EventLoop::new();
+    let event_loop: EventLoop<UserEvent> = EventLoopBuilder::with_user_event().build();
+    let proxy = event_loop.create_proxy();
+    let _ = PROXY.set(proxy);
     let window = WindowBuilder::new()
         .with_title("TraxDub")
         .with_inner_size(LogicalSize::new(800.0, 600.0))
@@ -24,7 +43,7 @@ pub fn run() -> Result<()> {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200&display=swap');
         
         body {
             margin: 0;
@@ -39,15 +58,15 @@ pub fn run() -> Result<()> {
         }
         
         .welcome {
-            font-size: 4rem;
-            font-weight: 600;
+            font-size: 2rem;
+            font-weight: 200;
             color: #d4c5a0;
             text-align: center;
         }
     </style>
 </head>
 <body>
-    <div class="welcome">welcome</div>
+    <div class="welcome">Welcome</div>
 </body>
 </html>"#;
 
@@ -80,11 +99,17 @@ pub fn run() -> Result<()> {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
 
-        if let Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } = event {
-            *control_flow = ControlFlow::Exit;
+        match event {
+            Event::UserEvent(UserEvent::Quit) => {
+                *control_flow = ControlFlow::Exit;
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            _ => {}
         }
     });
     

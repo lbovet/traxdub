@@ -36,16 +36,18 @@ fn main() -> Result<()> {
     // Set up Ctrl-C handler
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
-    ctrlc::set_handler(move || {
-        info!("Received Ctrl-C, shutting down");
-        r.store(false, Ordering::SeqCst);
-    })?;
     
     // Initialize modules
     let ui = Arc::new(ui::UI::new());
     let engine = Arc::new(engine::Engine::new(args.external)?);
     let mut controller = controller::Controller::new(ui.clone(), engine.clone(), args.init, args.new)?;
     
+    ctrlc::set_handler(move || {
+        info!("Received Ctrl-C, shutting down");
+        r.store(false, Ordering::SeqCst);
+        let _ = ui::window::close();
+    })?;
+
     debug!("TraxDub initialized");
     
     // Use scoped threads to avoid Send requirement
@@ -58,7 +60,7 @@ fn main() -> Result<()> {
         
         // Run the UI window on the main thread (required for most platforms)
         let ui_result = ui::window::run();
-        
+
         // Wait for controller to finish
         let controller_result = controller_handle.join()
             .unwrap_or_else(|e| Err(anyhow::anyhow!("Controller thread panicked: {:?}", e)));
