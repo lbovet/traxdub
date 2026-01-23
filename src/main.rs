@@ -56,10 +56,6 @@ fn main() -> Result<()> {
         s.spawn(move || {
             let _ = controller.run_until_signal(controller_running);
 
-            // Explicitly drop engine to ensure clean shutdown
-            debug!("Dropping engine...");
-            drop(engine);            
-
             // Close the UI
             debug!("Closing UI...");
             let _ = ui::window::close();

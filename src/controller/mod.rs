@@ -452,6 +452,11 @@ impl Controller {
         
         debug!("Controller shutting down gracefully");
         debug!("MIDI receiver stopped");
+
+        // Explicitly drop engine to ensure clean shutdown
+        debug!("Dropping engine...");
+        self.engine.close();
+
         Ok(())
     }
 }

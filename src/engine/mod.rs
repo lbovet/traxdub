@@ -81,7 +81,7 @@ pub struct Graph {
 
 /// Engine module that encapsulates an Ingen instance
 pub struct Engine {
-    ingen_process: Option<std::process::Child>,
+    ingen_process: Mutex<Option<std::process::Child>>,
     socket: Mutex<Option<UnixStream>>,
     /// List of available LV2 plugins
     plugins: Vec<Plugin>,
@@ -98,7 +98,7 @@ impl Engine {
         debug!("Initializing Engine...");
 
         let mut engine = Self {
-            ingen_process: None,
+            ingen_process: Mutex::new(None),
             socket: Mutex::new(None),
             plugins: Vec::new(),
             read_buffer: Mutex::new(Vec::new()),
@@ -154,7 +154,7 @@ impl Engine {
             .map_err(|e| anyhow!("Failed to start ingen process: {}. Make sure ingen is installed.", e))?;
 
         info!("Ingen process started (PID: {:?})", child.id());
-        self.ingen_process = Some(child);
+        *self.ingen_process.lock().unwrap() = Some(child);
 
         // Give Ingen time to initialize and create the socket
         debug!("Waiting for Ingen to initialize...");
@@ -592,14 +592,11 @@ impl Engine {
         Ok(graph)
     }
 
-}
-
-impl Drop for Engine {
-    fn drop(&mut self) {
+    pub fn close(&self) {
         debug!("Shutting down Engine...");
         
         // Clean up Ingen process if running
-        if let Some(mut process) = self.ingen_process.take() {
+        if let Some(mut process) = self.ingen_process.lock().unwrap().take() {
             match process.kill() {
                 Ok(_) => {
                     // Wait for the process to actually exit
