@@ -416,10 +416,8 @@ impl Driver {
         info!("Listening to {} MIDI input port(s)", connected_count);
         Ok(())
     }
-}
 
-impl Drop for Driver {
-    fn drop(&mut self) {
+    pub fn close(&self) {
         debug!("Signaling JACK client shutdown");
         self._active_client_handle.store(true, Ordering::SeqCst);
         // Give the thread time to cleanup

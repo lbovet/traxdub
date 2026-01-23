@@ -450,6 +450,8 @@ impl Controller {
             }
         }
         
+        self.driver.close();
+
         debug!("Controller shutting down gracefully");
         debug!("MIDI receiver stopped");
 

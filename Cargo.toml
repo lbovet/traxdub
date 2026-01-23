@@ -45,6 +45,7 @@ rand = "0.8"
 
 # Date/time handling for persistence
 chrono = "0.4"
+nix = { version = "0.31.1", features = ["signal"] }
 
 [dev-dependencies]
 mockall = "0.12"

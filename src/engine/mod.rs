@@ -597,17 +597,23 @@ impl Engine {
         
         // Clean up Ingen process if running
         if let Some(mut process) = self.ingen_process.lock().unwrap().take() {
-            match process.kill() {
-                Ok(_) => {
-                    // Wait for the process to actually exit
-                    match process.wait() {
-                        Ok(status) => debug!("Ingen process exited with {}", status),
-                        Err(e) => eprintln!("Error waiting for Ingen process to exit: {}", e),
-                    }
-                }
-                Err(e) => {
-                    eprintln!("Error killing Ingen process: {}", e);
-                }
+            // Get the process ID
+            let pid = process.id();
+            debug!("Sending SIGTERM to Ingen process (PID: {})", pid);
+            
+            // Send SIGTERM signal using nix crate
+            #[cfg(unix)]
+            {
+                use nix::sys::signal::{self, Signal};
+                use nix::unistd::Pid;
+                
+                let _ = signal::kill(Pid::from_raw(pid as i32), Signal::SIGTERM);
+            }
+            
+            // Wait for the process to exit gracefully
+            match process.wait() {
+                Ok(status) => debug!("Ingen process exited with {}", status),
+                Err(e) => eprintln!("Error waiting for Ingen process to exit: {}", e),
             }
         }
     }
