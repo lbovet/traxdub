@@ -34,52 +34,14 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
     let _ = PROXY.set(proxy);
     let window = WindowBuilder::new()
         .with_title("TraxDub")
-        .with_inner_size(LogicalSize::new(800.0, 600.0))        
+        .with_background_color((0x1a, 0x1a, 0x1a, 0xff).into())
+        .with_inner_size(LogicalSize::new(800.0, 600.0))
         .build(&event_loop)?;
 
-    let html = r#"<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Oxanium:wght@200&display=swap');
-        
-        body {
-            margin: 0;
-            padding: 0;
-            width: 100vw;
-            height: 100vh;
-            background: #1a1a1a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: 'Oxanium', sans-serif;
-        }
-        
-        .welcome {
-            font-size: 2rem;
-            font-weight: 200;
-            color: #d4c5a0;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <div class="welcome">Welcome</div>
-</body>
-</html>"#;
+    let html = include_str!("window.html").to_string();
+    let css = include_str!("style.css").to_string();
 
-    let builder = WebViewBuilder::new()
-        .with_url(&format!("data:text/html,{}", urlencoding::encode(html)));
-
-    #[cfg(any(
-        target_os = "windows",
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "android"
-    ))]
-    let _webview = builder.build(&window)?;
+    let window = Arc::new(window);    
 
     #[cfg(not(any(
         target_os = "windows",
@@ -90,11 +52,56 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
     let _webview = {
         use tao::platform::unix::WindowExtUnix;
         use wry::WebViewBuilderExtUnix;
+        
+        let webview: Arc<std::sync::Mutex<Option<wry::WebView>>> = Arc::new(std::sync::Mutex::new(None));
+        let webview_clone = Arc::clone(&webview);
+        
+        let builder = WebViewBuilder::new()
+            .with_url("app://local/index.html")
+            .with_background_color((26, 26, 26, 255))
+            .with_visible(false)
+            .with_custom_protocol("app".into(), move |_webview_id, request| {
+                use std::borrow::Cow;
+                
+                log::debug!("Custom protocol request: {}", request.uri());
+                
+                if request.uri().path() == "/style.css" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "text/css")
+                        .body(Cow::from(css.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/index.html" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "text/html")
+                        .body(Cow::from(html.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/oxanium.ttf" {
+                    // Include font file
+                    let font_data = include_bytes!("oxanium.ttf");
+                    wry::http::Response::builder()
+                        .header("Content-Type", "font/ttf")
+                        .body(Cow::from(font_data.as_slice()))
+                        .unwrap()                    
+                } else {
+                    wry::http::Response::builder()
+                        .status(404)
+                        .body(Cow::from(Vec::new()))
+                        .unwrap()
+                }
+            })
+            .with_ipc_handler(move |_req| {
+                if let Ok(wv) = webview_clone.lock() {
+                    if let Some(wv) = wv.as_ref() {
+                        let _ = wv.set_visible(true);
+                    }
+                }
+            });
+        
         let vbox = window.default_vbox().unwrap();
-        builder.build_gtk(vbox)?
+        let wv = builder.build_gtk(vbox)?;
+        *webview.lock().unwrap() = Some(wv);
+        webview
     };
-
-    window.set_visible(true);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -116,7 +123,7 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
     
     #[allow(unreachable_code)]
     {
-        drop(_webview);
+        //drop(_webview);
         Ok(())
     }
 }

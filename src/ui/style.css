@@ -1,0 +1,32 @@
+@font-face {
+  font-family: 'Oxanium';
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+  src: url(oxanium.ttf) format('truetype');
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background: #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Oxanium', sans-serif;
+    opacity: 0;
+    transition: opacity 0.1s ease-in;
+}
+
+body.loaded {
+    opacity: 1;
+}
+
+.welcome {
+    font-size: 2rem;
+    font-weight: 200;
+    color: #d4c5a0;
+    text-align: center;
+}
