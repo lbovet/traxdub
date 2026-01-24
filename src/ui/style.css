@@ -29,27 +29,40 @@ body.loaded {
     height: auto;
 }
 
-.logo path {
-    stroke: #1e2828 !important;
+.highlight-path {
+    animation: flash 0.5s ease-in-out alternate;
+    filter: drop-shadow(0 0 0px #22ffff) drop-shadow(0 0 0px #00ffff);
+}
+
+@keyframes flash {
+    0% {
+        filter: drop-shadow(0 0 2px #00ffff) drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff);
+    }
+    100% {
+        filter: drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff) drop-shadow(0 0 16px #00ffff);
+    }
+    100% {
+        filter: drop-shadow(0 0 0px #00ffff) drop-shadow(0 0 0px #00ffff) drop-shadow(0 0 0px #00ffff);
+    }    
 }
 
 .laser-point {
-    transition: opacity 0.2s;
+    transition: opacity 0.1s;
     animation: scintillate 0.08s ease-in-out infinite alternate;
-    filter: drop-shadow(0 0 0px #00ffff) drop-shadow(0 0 0px #00ffff);
+    filter: drop-shadow(0 0 0px #22ffff) drop-shadow(0 0 0px #00ffff);
 }
 
 @keyframes scintillate {
     0% {
-        opacity: 0.4;
+        opacity: 0.2;
         filter: drop-shadow(0 0 2px #00ffff) drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff);
     }
     50% {
         opacity: 1;
-        filter: drop-shadow(0 0 16px #00ffff) drop-shadow(0 0 32px #00ffff) drop-shadow(0 0 48px #00ffff);
+        filter: drop-shadow(0 0 16px #ffffff) drop-shadow(0 0 32px #ffffff) drop-shadow(0 0 56px #ffffff);
     }
     100% {
-        opacity: 0.7;
+        opacity: 0.6;
         filter: drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 24px #00ffff) drop-shadow(0 0 32px #00ffff);
     }
 }

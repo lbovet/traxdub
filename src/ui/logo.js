@@ -8,15 +8,7 @@ async function loadLogo() {
     
     // Add glow filter for laser effect
     const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    defs.innerHTML = `
-        <filter id="glow">
-            <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-            <feMerge>
-                <feMergeNode in="coloredBlur"/>
-                <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-        </filter>
-    `;
+
     svg.insertBefore(defs, svg.firstChild);
     
     document.body.appendChild(svg);
@@ -30,20 +22,20 @@ async function loadLogo() {
         
         // Create laser point
         const point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        point.setAttribute('r', '4');
+        point.setAttribute('r', '3');
         point.setAttribute('fill', '#00ff0000');
-        point.setAttribute('filter', 'url(#glow)');
         point.classList.add('laser-point');
 
         svg.appendChild(point);
         
-        const delay = index * 0.05;
-        const duration = .5;
+        const delay = index * 0.1;
+        const duration = 0.6;
         
         // Animate the path drawing
         setTimeout(() => {
             path.style.transition = `stroke-dashoffset ${duration}s ease-out`;
             path.style.strokeDashoffset = '0';
+            path.style.stroke = '#1e2828'
             point.setAttribute('fill', '#00ffff');
             
             // Animate the laser point along the path
@@ -56,15 +48,27 @@ async function loadLogo() {
                 const pointOnPath = path.getPointAtLength(length - currentLength);
                 point.setAttribute('cx', pointOnPath.x);
                 point.setAttribute('cy', pointOnPath.y);
+                point.setAttribute('r', 3 + progress*3);
                 
                 if (progress < 1) {
                     requestAnimationFrame(animate);
                 } else {
-                    point.style.opacity = '0';
+                    point.setAttribute('fill', '#00ff0000');
                     setTimeout(() => point.remove(), 200);
+                    // Start reverse highlight animation
+                    const highlight = path.cloneNode();
+                    highlight.setAttribute('id', 'highlight-'+index);
+                    highlight.setAttribute('class', 'highlight-path');
+                    highlight.style.strokeDashoffset = length+1;
+                    highlight.style.stroke = '#66ffff' // lighter cyan
+                    highlight.style.transition = `stroke-dashoffset ${duration}s ease-out`;
+                    path.parentNode.insertBefore(highlight, path.nextSibling);
+                    setTimeout(() => {
+                        highlight.style.strokeDashoffset = 2*length;
+                    }, 0);
                 }
             };
             requestAnimationFrame(animate);
-        }, delay * 1000);
+        }, delay * 1000 + 500);
     });
 }

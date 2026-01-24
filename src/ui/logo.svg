@@ -3,8 +3,8 @@
 
 <svg
    width="800"
-   height="200"
-   viewBox="0 0 800 200.00001"
+   height="256"
+   viewBox="0 0 800 256.00001"
    version="1.1"
    id="svg1"
    sodipodi:docname="traxdub.svg"
@@ -28,9 +28,9 @@
      inkscape:document-units="px"
      showguides="true"
      inkscape:lockguides="false"
-     inkscape:zoom="1.0998546"
-     inkscape:cx="632.35631"
-     inkscape:cy="101.37704"
+     inkscape:zoom="1.5554293"
+     inkscape:cx="402.78269"
+     inkscape:cy="116.04513"
      inkscape:window-width="1920"
      inkscape:window-height="1028"
      inkscape:window-x="0"
@@ -40,23 +40,18 @@
      inkscape:export-bgcolor="#00000000"
      showgrid="false">
     <sodipodi:guide
-       position="399.14367,281.82901"
+       position="399.14367,337.82901"
        orientation="1,0"
        id="guide6231"
        inkscape:locked="false" />
     <sodipodi:guide
-       position="229.65725,71.80124"
+       position="412.47641,127.84386"
        orientation="0,-1"
        id="guide6245"
        inkscape:locked="false" />
   </sodipodi:namedview>
   <defs
      id="defs1" />
-  <path
-     style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     d="m 30.073,29 h 286.63555 l 121.2142,146.31638"
-     id="tbarx"
-     sodipodi:nodetypes="ccc" />
   <path
      style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="M 110.26417,29 V 175.31638"
@@ -92,4 +87,9 @@
      d="m 697.86025,30.29894 -0.3382,145.01744 h 59.2848 L 770.059,161.80515 V 95.29426 L 757.11265,81.29573 h -59.3713"
      id="b"
      sodipodi:nodetypes="ccccccc" />
+  <path
+     style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     d="m 30.073,29 h 286.63555 l 121.2142,146.31638"
+     id="tbarx"
+     sodipodi:nodetypes="ccc" />
 </svg>
