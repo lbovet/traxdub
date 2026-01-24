@@ -39,9 +39,6 @@ body.loaded {
         filter: drop-shadow(0 0 2px #00ffff) drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff);
     }
     100% {
-        filter: drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff) drop-shadow(0 0 16px #00ffff);
-    }
-    100% {
         filter: drop-shadow(0 0 0px #00ffff) drop-shadow(0 0 0px #00ffff) drop-shadow(0 0 0px #00ffff);
     }    
 }

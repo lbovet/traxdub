@@ -28,7 +28,7 @@ async function loadLogo() {
 
         svg.appendChild(point);
         
-        const delay = index * 0.1;
+        const delay = index * 0.05;
         const duration = 0.6;
         
         // Animate the path drawing
@@ -61,7 +61,7 @@ async function loadLogo() {
                     highlight.setAttribute('class', 'highlight-path');
                     highlight.style.strokeDashoffset = length+1;
                     highlight.style.stroke = '#66ffff' // lighter cyan
-                    highlight.style.transition = `stroke-dashoffset ${duration}s ease-out`;
+                    highlight.style.transition = `stroke-dashoffset ${duration*0.7}s ease-out`;
                     path.parentNode.insertBefore(highlight, path.nextSibling);
                     setTimeout(() => {
                         highlight.style.strokeDashoffset = 2*length;
@@ -69,6 +69,6 @@ async function loadLogo() {
                 }
             };
             requestAnimationFrame(animate);
-        }, delay * 1000 + 500);
+        }, delay * 1000);
     });
 }

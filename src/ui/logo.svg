@@ -74,6 +74,11 @@
      sodipodi:nodetypes="cc" />
   <path
      style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
+     d="m 30.073,29 h 286.63555 l 121.2142,146.31638"
+     id="tbarx"
+     sodipodi:nodetypes="ccc" />
+  <path
+     style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
      d="m 472.21105,175.31638 -0.041,-146.30597 65.1859,-0.009 13.6394,14.79679 -0.4907,117.59724 -12.9309,13.92094 z"
      id="d"
      sodipodi:nodetypes="ccccccc" />
@@ -87,9 +92,4 @@
      d="m 697.86025,30.29894 -0.3382,145.01744 h 59.2848 L 770.059,161.80515 V 95.29426 L 757.11265,81.29573 h -59.3713"
      id="b"
      sodipodi:nodetypes="ccccccc" />
-  <path
-     style="fill:none;fill-opacity:1;stroke:#000000;stroke-width:6;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:none;stroke-opacity:1"
-     d="m 30.073,29 h 286.63555 l 121.2142,146.31638"
-     id="tbarx"
-     sodipodi:nodetypes="ccc" />
 </svg>
