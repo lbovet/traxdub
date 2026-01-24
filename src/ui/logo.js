@@ -6,11 +6,6 @@ async function loadLogo() {
     const svg = svgDoc.documentElement;
     svg.classList.add('logo');
     
-    // Add glow filter for laser effect
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-
-    svg.insertBefore(defs, svg.firstChild);
-    
     document.body.appendChild(svg);
     
     // Animate paths progressively with laser point
@@ -71,4 +66,14 @@ async function loadLogo() {
             requestAnimationFrame(animate);
         }, delay * 1000);
     });
+    
+    // After all path animations, collapse the svg vertically
+    const totalDelay = 1.3; // last path: draw + highlight + flash
+    setTimeout(() => {
+        svg.style.transition = 'transform 0.7s, background 0.1s ease-out';
+        svg.style.transform = 'scaleY(0)';
+        setTimeout(() => {
+            svg.style.background = '#66ffff';
+        }, 0.5 * 1000);
+    }, totalDelay * 1000);
 }
