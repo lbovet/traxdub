@@ -24,9 +24,33 @@ body.loaded {
     opacity: 1;
 }
 
-.welcome {
-    font-size: 2rem;
-    font-weight: 200;
-    color: #d4c5a0;
-    text-align: center;
+.logo {
+    width: 200px;
+    height: auto;
 }
+
+.logo path {
+    stroke: #1e2828 !important;
+}
+
+.laser-point {
+    transition: opacity 0.2s;
+    animation: scintillate 0.08s ease-in-out infinite alternate;
+    filter: drop-shadow(0 0 0px #00ffff) drop-shadow(0 0 0px #00ffff);
+}
+
+@keyframes scintillate {
+    0% {
+        opacity: 0.4;
+        filter: drop-shadow(0 0 2px #00ffff) drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 16px #00ffff);
+    }
+    50% {
+        opacity: 1;
+        filter: drop-shadow(0 0 16px #00ffff) drop-shadow(0 0 32px #00ffff) drop-shadow(0 0 48px #00ffff);
+    }
+    100% {
+        opacity: 0.7;
+        filter: drop-shadow(0 0 8px #00ffff) drop-shadow(0 0 24px #00ffff) drop-shadow(0 0 32px #00ffff);
+    }
+}
+

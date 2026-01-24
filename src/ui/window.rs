@@ -40,6 +40,8 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
 
     let html = include_str!("window.html").to_string();
     let css = include_str!("style.css").to_string();
+    let logo = include_str!("logo.svg").to_string();
+    let logo_js = include_str!("logo.js").to_string();
 
     let window = Arc::new(window);    
 
@@ -74,6 +76,16 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
                     wry::http::Response::builder()
                         .header("Content-Type", "text/html")
                         .body(Cow::from(html.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/logo.svg" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "image/svg+xml")
+                        .body(Cow::from(logo.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/logo.js" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/javascript")
+                        .body(Cow::from(logo_js.clone().into_bytes()))
                         .unwrap()
                 } else if request.uri().path() == "/oxanium.ttf" {
                     // Include font file
