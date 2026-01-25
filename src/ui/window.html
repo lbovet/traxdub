@@ -3,16 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css">    
+</head>
+<body>
+    <div class="full-page-wrapper">
+        <svg id="main" viewBox="0 0 2000 2000">
+            <g id="thin-layer" transform="translate(0.5,0.5)">
+                <line id="line" x1="905" y1="1000" x2="1095" y2="1000"
+                    style="stroke-linecap: round;"
+                    stroke-opacity="0"
+                    stroke="#66ffff"
+                    stroke-width="1"/> 
+                    <circle 
+                        id="bullet" 
+                        cx="1000" 
+                        cy="1000" 
+                        r="0" 
+                        stroke="#1e2828" 
+                        stroke-width="1"
+                        fill="#66ffff" />                
+            </g>
+
+            <g id="thick-layer">
+            </g>            
+        </svg>
+    </div>
     <script src="logo.js"></script>
     <script>
+        let ratio = 1.2;
+        document.getElementById('main').setAttribute('width', 2000 * ratio);
         window.addEventListener('load', async function() {
-            await loadLogo();
+            await loadLogo(ratio, () => {
+                const bullet = document.getElementById('bullet');
+                bullet.style.transition = 'r 0.5s ease-out';
+                bullet.setAttribute('r', 4);
+            },
+            () => {
+                const line = document.getElementById('line');
+                line.style.transition = 'stroke-opacity 0.4s ease-in';
+                line.setAttribute('stroke-opacity', 1);
+            });
             document.body.classList.add('loaded');
             window.ipc.postMessage('page-loaded');
         });
     </script>
-</head>
-<body>
 </body>
 </html>

@@ -1,12 +1,20 @@
-async function loadLogo() {
+async function loadLogo(ratio, bulletCallback, doneCallback) {
     const response = await fetch('logo.svg');
     const svgText = await response.text();
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
     const svg = svgDoc.documentElement;
+    svg.setAttribute('width', 206 * ratio);
     svg.classList.add('logo');
     svg.style.transform = 'scaleY(1)';
 
+    // Center the logo SVG absolutely over the background
+    svg.style.position = 'absolute';
+    svg.style.left = '50%';
+    svg.style.top = '50%';
+    svg.style.transform = 'translate(-50%, -50%) scaleY(1)';
+    svg.style.zIndex = '1';
+    svg.style.pointerEvents = 'none';
     document.body.appendChild(svg);
     
     const duration = 1.2;
@@ -53,7 +61,7 @@ async function loadLogo() {
                     point.setAttribute('r', 2 + (2 + progress*10)*Math.random());
                     requestAnimationFrame(animate);
                 } else if (progress < 2) {      
-                    point.setAttribute('r', 18*Math.random());              
+                    point.setAttribute('r', 14*Math.random());              
                     if (part === 0) {
                         // Start highlight animation
                         part = 1;                        
@@ -72,7 +80,7 @@ async function loadLogo() {
                     } else {
                         // Fade out highlight
                         point.setAttribute('opacity', 2 - progress);
-                        highlight.style.strokeWidth = 32 - progress * 12 - 3
+                        highlight.style.strokeWidth = 28 - progress * 12
                         const blur = svg.querySelector('filter#glow feGaussianBlur');                        
                         blur.setAttribute('stdDeviation', 20 - progress * 6);
                         highlight.style.strokeOpacity = 1 - Math.random() * (2 - progress);
@@ -84,15 +92,23 @@ async function loadLogo() {
             };
             requestAnimationFrame(animate);
         }, delay * 1000);
-    });
-    
+    });    
+
     //After all path animations, collapse the svg vertically
-     const totalDelay = duration + gap * paths.length + 0.5;
+     const totalDelay = duration;
     setTimeout(() => {
-        svg.style.transition = 'transform 0.7s, opacity 0.3s';
-        svg.style.transform = 'scaleY(0)';
+        bulletCallback();
         setTimeout(() => {
-            svg.style.opacity = '0';
-        }, 200);
-    }, totalDelay * 1000); 
+            doneCallback();
+            svg.style.transition = 'transform 0.7s, opacity 0.3s';
+            svg.style.transform = 'translate(-50%, -50%) scaleY(0)';
+            setTimeout(() => {
+                svg.style.opacity = '0';
+            }, 200);
+            setTimeout(() => {
+                svg.remove();
+            }, 500);
+        }, 200);         
+    }, totalDelay * 1000 + 500);
+
 }
