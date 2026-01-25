@@ -8,30 +8,34 @@
 <body>
     <div class="full-page-wrapper">
         <svg id="main" viewBox="0 0 2000 2000">
-            <g id="thin-layer" transform="translate(0.5,0.5)">
-                <line id="line" x1="905" y1="1000" x2="1095" y2="1000"
-                    style="stroke-linecap: round;"
-                    stroke-opacity="0"
-                    stroke="#66ffff"
-                    stroke-width="1"/> 
-                    <circle 
-                        id="bullet" 
-                        cx="1000" 
-                        cy="1000" 
-                        r="0" 
-                        stroke="#1e2828" 
-                        stroke-width="1"
-                        fill="#66ffff" />                
-            </g>
+            <g id="graph">
+                <g id="thin-layer" transform="translate(0.5,0.5)">
+                    <line id="line" x1="905" y1="1000" x2="1095" y2="1000"
+                        style="stroke-linecap: round;"
+                        stroke-opacity="0"
+                        stroke="#66ffff"
+                        stroke-width="1"/> 
+                        <circle 
+                            id="bullet" 
+                            cx="1000" 
+                            cy="1000" 
+                            r="0" 
+                            stroke="#1e2828" 
+                            stroke-width="1"
+                            fill="#66ffff" />                
+                </g>
 
-            <g id="thick-layer">
-            </g>            
+                <g id="thick-layer">
+                </g>            
+            </g>
         </svg>
     </div>
     <script src="logo.js"></script>
     <script>
         let ratio = 1.2;
-        document.getElementById('main').setAttribute('width', 2000 * ratio);
+        const size = 2000;
+        document.getElementById('main').setAttribute('width', size * ratio);
+        document.getElementById('main').setAttribute('height', size * ratio);
         window.addEventListener('load', async function() {
             await loadLogo(ratio, () => {
                 const bullet = document.getElementById('bullet');
@@ -46,6 +50,22 @@
             document.body.classList.add('loaded');
             window.ipc.postMessage('page-loaded');
         });
+        
+        function updateSize() {
+            const svg = document.getElementById('main');
+            if (!svg) return;
+            const pt = svg.createSVGPoint();
+            pt.x = 0;
+            pt.y = 0;
+            const svgCoords = pt.matrixTransform(svg.getScreenCTM().inverse());
+
+            // Move the graph vertically between the screen top and the center
+            const graph = document.getElementById('graph');
+            const newY = (size / 2 - Math.round(svgCoords.y)) * 0.5;
+            graph.setAttribute('transform', `translate(0, ${-newY})`);
+        }
+        window.addEventListener('resize', updateSize);
+        window.addEventListener('DOMContentLoaded', updateSize);
     </script>
 </body>
 </html>

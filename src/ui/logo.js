@@ -11,7 +11,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
     // Center the logo SVG absolutely over the background
     svg.style.position = 'absolute';
     svg.style.left = '50%';
-    svg.style.top = '50%';
+    svg.style.top = '25%';
     svg.style.transform = 'translate(-50%, -50%) scaleY(1)';
     svg.style.zIndex = '1';
     svg.style.pointerEvents = 'none';
