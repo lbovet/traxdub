@@ -21,7 +21,7 @@
                             cy="1000" 
                             r="0" 
                             stroke="#1e2828" 
-                            stroke-width="1"
+                            stroke-width="0"
                             fill="#66ffff" />                
                 </g>
 
@@ -46,6 +46,9 @@
                 const line = document.getElementById('line');
                 line.style.transition = 'stroke-opacity 0.4s ease-in';
                 line.setAttribute('stroke-opacity', 1);
+                const bullet = document.getElementById('bullet');
+                bullet.style.transition = 'stroke-width 0.4s ease-in';
+                bullet.setAttribute('stroke-width', 1);                
             });
             document.body.classList.add('loaded');
             window.ipc.postMessage('page-loaded');

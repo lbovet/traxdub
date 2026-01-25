@@ -26,12 +26,12 @@ body.loaded {
 }
 
 .full-page-wrapper {
-display: flex;
-justify-content: center; /* Centers horizontally even if content overflows */
-align-items: center;     /* Centers vertically even if content overflows */
-width: 100vw;
-height: 100vh;
-overflow: hidden;          /* Allows scrolling to see the rest of the large SVG */
+    display: flex;
+    justify-content: center; /* Centers horizontally even if content overflows */
+    align-items: center;     /* Centers vertically even if content overflows */
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;          /* Allows scrolling to see the rest of the large SVG */
 }
 
 .highlight-path {

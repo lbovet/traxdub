@@ -4,17 +4,22 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
     const parser = new DOMParser();
     const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
     const svg = svgDoc.documentElement;
-    svg.setAttribute('width', 206 * ratio);
+    const internalWidth = 800; // Original SVG width
+    const externalWidth = 206 * ratio;
+    svg.setAttribute('width', externalWidth);
     svg.classList.add('logo');
     svg.style.transform = 'scaleY(1)';
+    // Compensate for pixel alignment correction
+    svg.style.marginLeft = '0.5px';
+    svg.style.marginTop = '0.5px';
 
     // Center the logo SVG absolutely over the background
     svg.style.position = 'absolute';
     svg.style.left = '50%';
     svg.style.top = '25%';
     svg.style.transform = 'translate(-50%, -50%) scaleY(1)';
-    svg.style.zIndex = '1';
-    svg.style.pointerEvents = 'none';
+    svg.style.zIndex = '-1';
+    svg.style.pointerEvents = 'none';       
     document.body.appendChild(svg);
     
     const duration = 1.2;
@@ -94,10 +99,15 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
         }, delay * 1000);
     });    
 
+    
     //After all path animations, collapse the svg vertically
-     const totalDelay = duration;
-    setTimeout(() => {
+    const totalDelay = duration;
+
+    setTimeout(() => {        
         bulletCallback();
+    }, totalDelay * 1000);
+
+    setTimeout(() => {        
         setTimeout(() => {
             doneCallback();
             svg.style.transition = 'transform 0.7s, opacity 0.3s';
@@ -108,7 +118,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
             setTimeout(() => {
                 svg.remove();
             }, 500);
-        }, 200);         
+        }, 300);         
     }, totalDelay * 1000 + 500);
 
 }
