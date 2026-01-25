@@ -10,7 +10,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
     svg.classList.add('logo');
     svg.style.transform = 'scaleY(1)';
     // Compensate for pixel alignment correction
-    svg.style.marginLeft = '0.5px';
+    svg.style.marginLeft = '1.5px';
     svg.style.marginTop = '0.5px';
 
     // Center the logo SVG absolutely over the background

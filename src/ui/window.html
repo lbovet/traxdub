@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.2">
     <link rel="stylesheet" href="style.css">    
 </head>
 <body>
@@ -40,7 +40,7 @@
         window.addEventListener('load', async function() {
             await loadLogo(ratio, () => {
                 const bullet = document.getElementById('bullet');
-                bullet.style.transition = 'r 0.5s ease-out';
+                bullet.style.transition = 'r 1.4s ease-out';
                 bullet.setAttribute('r', 4);
             },
             () => {
@@ -69,6 +69,8 @@
                     menu.moveUp();
                 } else if (e.key === 'ArrowDown') {
                     menu.moveDown();
+                } else if (e.key === 'Enter') {
+                    menu.stackOption();
                 }
             });
         };
