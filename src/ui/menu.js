@@ -1,4 +1,15 @@
-function showMenu(options) {
+function showMenu(options) {    
+    // Fade out and remove any existing menu
+    const existingMenu = document.getElementsByClassName('menu-container')[0];
+    if (existingMenu) {
+        existingMenu.style.transition = 'opacity 0.3s';
+        existingMenu.style.opacity = '0';
+        setTimeout(() => {
+            if (existingMenu.parentNode) {
+                existingMenu.parentNode.removeChild(existingMenu);
+            }
+        }, 300);
+    }
     let selected = 0;
     let menuOptions = options;
     let menuDiv = document.createElement('div');
@@ -13,6 +24,7 @@ function showMenu(options) {
     menuDiv.style.background = 'none';
     menuDiv.style.border = 'none';
     menuDiv.style.outline = 'none';
+    menuDiv.style.marginTop = `${Math.max(0, (6 - options.length) * 1.2)}em`;
     menuDiv.style.zIndex = 10;
     menuDiv.style.opacity = 0;
     menuDiv.style.transition = 'opacity 1s';
