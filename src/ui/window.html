@@ -31,6 +31,7 @@
         </svg>
     </div>
     <script src="logo.js"></script>
+    <script src="menu.js"></script>
     <script>
         let ratio = 1.2;
         const size = 2000;
@@ -48,11 +49,29 @@
                 line.setAttribute('stroke-opacity', 1);
                 const bullet = document.getElementById('bullet');
                 bullet.style.transition = 'stroke-width 0.4s ease-in';
-                bullet.setAttribute('stroke-width', 1);                
+                bullet.setAttribute('stroke-width', 1);     
+                setTimeout(() => {
+                    createMenu();
+                }, 100);           
             });
             document.body.classList.add('loaded');
             window.ipc.postMessage('page-loaded');
         });
+        function createMenu() {
+            // Test menu
+            const menu = showMenu([
+                { label: 'Add Input >' },
+                { label: 'Add Output >' },
+                { label: 'Exit' },
+            ]);
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp') {
+                    menu.moveUp();
+                } else if (e.key === 'ArrowDown') {
+                    menu.moveDown();
+                }
+            });
+        };
         
         function updateSize() {
             const svg = document.getElementById('main');

@@ -1,7 +1,5 @@
 @font-face {
   font-family: 'Oxanium';
-  font-style: normal;
-  font-weight: 200;
   font-display: swap;
   src: url(oxanium.ttf) format('truetype');
 }
@@ -16,8 +14,9 @@ body {
     align-items: center;
     justify-content: center;
     font-family: 'Oxanium', sans-serif;
-    opacity: 0;
-    transition: opacity 0.1s ease-in;
+    font-weight: 200;
+    font-size: 20px;
+    color: #66ffff;
     overflow: hidden;
 }
 
@@ -48,5 +47,14 @@ body.loaded {
     flex-shrink: 0; /* Vital: prevents flexbox from squishing the SVG to fit the page */
     z-index: 0;
     pointer-events: none;
+}
+
+.menu-option {
+    color: #067575;
+    height: 1.2em;
+}
+
+.menu-option.selected {
+    color: #66ffff;
 }
 
