@@ -5,9 +5,13 @@ async function loadLogo() {
     const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
     const svg = svgDoc.documentElement;
     svg.classList.add('logo');
-    
+    svg.style.transform = 'scaleY(1)';
+
     document.body.appendChild(svg);
     
+    const duration = 1.2;
+    const gap = 0.1; // seconds
+
     // Animate paths progressively with laser point
     const paths = svg.querySelectorAll('path');
     paths.forEach((path, index) => {
@@ -17,63 +21,78 @@ async function loadLogo() {
         
         // Create laser point
         const point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        point.setAttribute('r', '3');
         point.setAttribute('fill', '#00ff0000');
+        point.setAttribute('filter', 'url(#blur)');
         point.classList.add('laser-point');
 
         svg.appendChild(point);
         
-        const delay = index * 0.05;
-        const duration = 0.6;
-        
+        const delay = index * gap;
+
         // Animate the path drawing
         setTimeout(() => {
             path.style.transition = `stroke-dashoffset ${duration}s ease-out`;
             path.style.strokeDashoffset = '0';
             path.style.stroke = '#1e2828'
-            point.setAttribute('fill', '#00ffff');
             
             // Animate the laser point along the path
             let start = null;
+            let highlight = null;
+            let part = 0
             const animate = (timestamp) => {
                 if (!start) start = timestamp;
-                const progress = Math.min((timestamp - start) / (duration * 1000), 1);
+                const progress = Math.min(2*(timestamp - start) / (duration * 1000), 2);
                 
-                const currentLength = length * (1 - progress);
+                const currentLength = Math.abs(length * (1 - progress));
+                
                 const pointOnPath = path.getPointAtLength(length - currentLength);
                 point.setAttribute('cx', pointOnPath.x);
                 point.setAttribute('cy', pointOnPath.y);
-                point.setAttribute('r', 3 + progress*3);
-                
-                if (progress < 1) {
+                point.setAttribute('fill', Math.random() > 0.2 ? '#66ffff' : '#ffffff');
+                if (progress < 1) {                    
+                    point.setAttribute('r', 2 + (2 + progress*10)*Math.random());
                     requestAnimationFrame(animate);
-                } else {
-                    point.setAttribute('fill', '#00ff0000');
-                    setTimeout(() => point.remove(), 200);
-                    // Start reverse highlight animation
-                    const highlight = path.cloneNode();
-                    highlight.setAttribute('id', 'highlight-'+index);
-                    highlight.setAttribute('class', 'highlight-path');
-                    highlight.style.strokeDashoffset = length+1;
-                    highlight.style.stroke = '#66ffff' // lighter cyan
-                    highlight.style.transition = `stroke-dashoffset ${duration*0.7}s ease-out`;
-                    path.parentNode.insertBefore(highlight, path.nextSibling);
-                    setTimeout(() => {
-                        highlight.style.strokeDashoffset = 2*length;
-                    }, 0);
+                } else if (progress < 2) {      
+                    point.setAttribute('r', 18*Math.random());              
+                    if (part === 0) {
+                        // Start highlight animation
+                        part = 1;                        
+                        setTimeout(() => point.remove(), 400);
+                        highlight = path.cloneNode();
+                        highlight.setAttribute('id', 'highlight-'+index);
+                        highlight.setAttribute('class', 'highlight-path');
+                        highlight.style.strokeDashoffset = length+1;
+                        highlight.style.stroke = '#66ffff' // lighter cyan
+                        highlight.style.transition = `stroke-dashoffset ${duration*0.7}s ease-out`;
+                        path.parentNode.insertBefore(highlight, path.nextSibling);
+                        setTimeout(() => {
+                            highlight.style.strokeDashoffset = 2*length;
+                        }, 0);
+                        requestAnimationFrame(animate);
+                    } else {
+                        // Fade out highlight
+                        point.setAttribute('opacity', 2 - progress);
+                        highlight.style.strokeWidth = 32 - progress * 12 - 3
+                        const blur = svg.querySelector('filter#glow feGaussianBlur');                        
+                        blur.setAttribute('stdDeviation', 20 - progress * 6);
+                        highlight.style.strokeOpacity = 1 - Math.random() * (2 - progress);
+                        const flood = svg.querySelector('filter#glow feFlood');                        
+                        flood.setAttribute('flood-opacity', 1 - progress / 2);                
+                        requestAnimationFrame(animate);
+                    }
                 }
             };
             requestAnimationFrame(animate);
         }, delay * 1000);
     });
     
-    // After all path animations, collapse the svg vertically
-    const totalDelay = 1.3; // last path: draw + highlight + flash
+    //After all path animations, collapse the svg vertically
+     const totalDelay = duration + gap * paths.length + 0.5;
     setTimeout(() => {
-        svg.style.transition = 'transform 0.7s, background 0.1s ease-out';
+        svg.style.transition = 'transform 0.7s, opacity 0.3s';
         svg.style.transform = 'scaleY(0)';
         setTimeout(() => {
-            svg.style.background = '#66ffff';
-        }, 0.5 * 1000);
-    }, totalDelay * 1000);
+            svg.style.opacity = '0';
+        }, 200);
+    }, totalDelay * 1000); 
 }
