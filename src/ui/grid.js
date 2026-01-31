@@ -7,7 +7,8 @@ function createGrid(svgElement) {
     let pendingChanges = new Set(); // Set of box ids with pending position changes
     let pendingSizeChange = false;
     let firstCommit = true;
-    let selectionCircle = null; // Circle to indicate selected line
+    let focusCircle = null; // Circle to indicate focused line
+    let focusedElement = null; // { type: 'box'|'line', id: string }
 
     const svgNS = "http://www.w3.org/2000/svg";
     const verticalSpacing = 48;
@@ -295,10 +296,36 @@ function createGrid(svgElement) {
         lines.delete(key);
     }
 
-    function selectLine(fromId, toId) {
+    function unfocus() {
+        if (!focusedElement) return;
+
+        if (focusedElement.type === 'line') {
+            // Hide the focus circle
+            if (focusCircle) {
+                focusCircle.style.display = 'none';
+            }
+        } else if (focusedElement.type === 'box') {
+            // Uninvert the box
+            const { group } = boxes.get(focusedElement.id);
+            if (group) {
+                const rect = group.querySelector('rect');
+                const text = group.querySelector('text');
+                rect.setAttribute('fill', '#1a1a1a');
+                text.setAttribute('fill', '#66ffff');
+                text.style.fontWeight = 'normal';
+            }
+        }
+
+        focusedElement = null;
+    }
+
+    function focusLine(fromId, toId) {
         const key = `${fromId}-${toId}`;
 
         if (!lines.has(key)) return;
+
+        // Unfocus any currently focused element
+        unfocus();
 
         const { path } = lines.get(key);
 
@@ -308,20 +335,42 @@ function createGrid(svgElement) {
         // Get the point at the middle of the path
         const midPoint = path.getPointAtLength(pathLength / 2);
 
-        // Create selection circle if it doesn't exist
-        if (!selectionCircle) {
-            selectionCircle = document.createElementNS(svgNS, 'circle');
-            selectionCircle.setAttribute('r', '4');
-            selectionCircle.setAttribute('fill', '#66ffff');
-            selectionCircle.setAttribute('stroke', '#1a1a1a');
-            selectionCircle.setAttribute('stroke-width', '1');
-            linesGroup.appendChild(selectionCircle);
+        // Create focus circle if it doesn't exist
+        if (!focusCircle) {
+            focusCircle = document.createElementNS(svgNS, 'circle');
+            focusCircle.setAttribute('r', '4');
+            focusCircle.setAttribute('fill', '#66ffff');
+            focusCircle.setAttribute('stroke', '#1a1a1a');
+            focusCircle.setAttribute('stroke-width', '1');
+            linesGroup.appendChild(focusCircle);
         }
 
         // Position the circle at the midpoint
-        selectionCircle.setAttribute('cx', midPoint.x);
-        selectionCircle.setAttribute('cy', midPoint.y);
-        selectionCircle.style.display = 'block';
+        focusCircle.setAttribute('cx', midPoint.x);
+        focusCircle.setAttribute('cy', midPoint.y);
+        focusCircle.style.display = 'block';
+
+        // Track focused element
+        focusedElement = { type: 'line', id: key };
+    }
+
+    function focusBox(id) {
+        if (!boxes.has(id)) return;
+
+        // Unfocus any currently focused element
+        unfocus();
+
+        const { group } = boxes.get(id);
+        const rect = group.querySelector('rect');
+        const text = group.querySelector('text');
+
+        // Invert colors
+        rect.setAttribute('fill', '#66ffff');
+        text.setAttribute('fill', '#1a1a1a');
+        text.style.fontWeight = 'bold';
+
+        // Track focused element
+        focusedElement = { type: 'box', id };
     }
 
     function commit() {
@@ -380,7 +429,8 @@ function createGrid(svgElement) {
         removeBox,
         addLine,
         removeLine,
-        selectLine,
+        focusLine,
+        focusBox,
         commit
     };
 }

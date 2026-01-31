@@ -37,7 +37,7 @@
             grid.setBox('inputs', { invisible: true }, 0, 0);
             grid.setBox('outputs', { invisible: true }, 0, 1);
             grid.addLine('inputs', 'outputs');
-            grid.selectLine('inputs', 'outputs');
+            grid.focusLine('inputs', 'outputs');
             grid.commit();
 
             // Test menu
@@ -70,18 +70,22 @@
                         ]);
                     } else if(menu.getSelected().id === 'audio_in') {
                         grid.setBox('audio_input', { label: 'IN' }, 0, 0);
+                        grid.focusBox('audio_input');
                         grid.commit();
                         menu.close();
                     } else if(menu.getSelected().id === 'audio_out') {
                         grid.setBox('audio_output', { label: 'OUT' }, 0, 1);
+                        grid.focusBox('audio_output');
                         grid.removeLine('inputs', 'outputs');
                         grid.addLine('audio_input', 'audio_output');
                         grid.commit();
                         menu.close();
                     } else if(menu.getSelected().id === 'reverb') {
+                        grid.removeLine('audio_input', 'audio_output');
                         grid.setSize(1, 3);
                         grid.setBox('audio_output', {}, 0, 2);
                         grid.setBox('reverb_effect', { label: 'REV' }, 0, 1);
+                        grid.focusBox('reverb_effect');
                         grid.addLine('audio_input', 'reverb_effect');
                         grid.addLine('reverb_effect', 'audio_output');
                         grid.commit();
@@ -89,6 +93,8 @@
                     } else if(menu.getSelected().id === 'delay') {
                         grid.setSize(2, 3);
                         grid.setBox('delay_effect', { label: 'DEL' }, 1, 1);
+                        grid.setBox('audio_output', {}, 1, 2);
+                        grid.focusBox('delay_effect');
                         grid.addLine('audio_input', 'delay_effect');
                         grid.addLine('delay_effect', 'audio_output');
                         grid.commit();
