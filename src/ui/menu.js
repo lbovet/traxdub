@@ -258,11 +258,30 @@ function showMenu(options) {
 
     }
 
+    function exit() {
+        // Clear the menu stack
+        menuStack = [];
+
+        // Remove the menu from DOM
+        if (menuDiv && menuDiv.parentNode) {
+            menuDiv.parentNode.removeChild(menuDiv);
+        }
+
+        // Remove the option stack if it exists
+        if (optionStack && optionStack.parentNode) {
+            optionStack.parentNode.removeChild(optionStack);
+        }
+
+        // Clear current menu reference
+        currentMenu = null;
+    }
+
     const menu = {
         moveUp: () => currentMenu && currentMenu._moveUp(),
         moveDown: () => currentMenu && currentMenu._moveDown(),
         getSelected: () => currentMenu && currentMenu._getSelected(),
         close: () => currentMenu && currentMenu._close(),
+        exit: () => currentMenu && currentMenu._exit(),
         stackOption,
         unstackOption,
         menuDiv,
@@ -276,7 +295,8 @@ function showMenu(options) {
             render();
         },
         _getSelected: () => menuOptions[selected],
-        _close
+        _close,
+        _exit: exit
     };
     currentMenu = menu;
     return menu;

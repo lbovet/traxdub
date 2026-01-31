@@ -3,21 +3,22 @@ const size = 2000;
 document.getElementById('main').setAttribute('width', size * ratio);
 document.getElementById('main').setAttribute('height', size * ratio);
 
-function init(callback) {
+function init(prepareCallback, doneCallback) {
     window.addEventListener('load', async function() {
         await loadLogo(ratio, () => {
             const bullet = document.getElementById('bullet');
-            bullet.style.transition = 'r 1.4s ease-out';
+            bullet.style.transition = 'r 1.2s ease-out';
             bullet.setAttribute('r', 4);
+            prepareCallback();
         },
         () => {
-            const line = document.getElementById('line');
-            line.style.transition = 'stroke-opacity 0.4s ease-in';
-            //line.setAttribute('stroke-opacity', 1);
             const bullet = document.getElementById('bullet');
             bullet.style.transition = 'stroke-width 0.4s ease-in';
             bullet.setAttribute('stroke-width', 1);
-            callback();
+            setTimeout(() => {
+                bullet.remove();
+            }, 400);
+            doneCallback();
         });
         document.body.classList.add('loaded');
         window.ipc.postMessage('page-loaded');

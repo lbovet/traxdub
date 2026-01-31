@@ -1,4 +1,4 @@
-let skip=true
+let skip=false
 
 async function loadLogo(ratio, bulletCallback, doneCallback) {
     if(skip) {

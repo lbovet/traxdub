@@ -6,6 +6,8 @@ function createGrid(svgElement) {
     let animatingBoxes = new Map(); // id -> { startPos, endPos, startTime, duration }
     let pendingChanges = new Set(); // Set of box ids with pending position changes
     let pendingSizeChange = false;
+    let firstCommit = true;
+    let selectionCircle = null; // Circle to indicate selected line
 
     const svgNS = "http://www.w3.org/2000/svg";
     const verticalSpacing = 48;
@@ -17,6 +19,7 @@ function createGrid(svgElement) {
     // Create container group for all boxes
     const containerGroup = document.createElementNS(svgNS, 'g');
     containerGroup.setAttribute('id', 'grid-container');
+    containerGroup.style.opacity = '0'; // Start invisible
     svgElement.firstElementChild.firstElementChild.appendChild(containerGroup);
 
     // Create container for lines (behind boxes)
@@ -85,7 +88,9 @@ function createGrid(svgElement) {
 
             const text = existing.group.querySelector('text');
             const rect = existing.group.querySelector('rect');
-            text.textContent = box.label;
+            if(box.label) {
+                text.textContent = box.label;
+            }
 
             // Calculate text width and update box width
             const textBBox = text.getBBox();
@@ -290,11 +295,48 @@ function createGrid(svgElement) {
         lines.delete(key);
     }
 
+    function selectLine(fromId, toId) {
+        const key = `${fromId}-${toId}`;
+
+        if (!lines.has(key)) return;
+
+        const { path } = lines.get(key);
+
+        // Get the total length of the path
+        const pathLength = path.getTotalLength();
+
+        // Get the point at the middle of the path
+        const midPoint = path.getPointAtLength(pathLength / 2);
+
+        // Create selection circle if it doesn't exist
+        if (!selectionCircle) {
+            selectionCircle = document.createElementNS(svgNS, 'circle');
+            selectionCircle.setAttribute('r', '4');
+            selectionCircle.setAttribute('fill', '#66ffff');
+            selectionCircle.setAttribute('stroke', '#1a1a1a');
+            selectionCircle.setAttribute('stroke-width', '1');
+            linesGroup.appendChild(selectionCircle);
+        }
+
+        // Position the circle at the midpoint
+        selectionCircle.setAttribute('cx', midPoint.x);
+        selectionCircle.setAttribute('cy', midPoint.y);
+        selectionCircle.style.display = 'block';
+    }
+
     function commit() {
+        // Fade in grid on first commit
+        if (firstCommit) {
+            containerGroup.style.transition = 'opacity 300ms ease-in';
+            containerGroup.style.opacity = '1';
+            firstCommit = false;
+        }
+
         if (pendingChanges.size === 0) return;
 
         const startTime = Date.now();
         const duration = 300;
+
 
         // Animate all boxes with pending changes
         pendingChanges.forEach(id => {
@@ -338,6 +380,7 @@ function createGrid(svgElement) {
         removeBox,
         addLine,
         removeLine,
+        selectLine,
         commit
     };
 }
