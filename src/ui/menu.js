@@ -1,3 +1,4 @@
+
 function showMenu(options) {
     let selected = 0;
     let menuOptions = options;
@@ -19,7 +20,6 @@ function showMenu(options) {
     menuDiv.style.transition = 'opacity 1s';
     setTimeout(() => {
         menuDiv.style.opacity = 1;
-        menuDiv.style.transition = 'opacity 0.2s';
     }, 100);
 
     // Option elements
@@ -165,7 +165,7 @@ function showMenu(options) {
         animDiv.style.top = originalY + 'px';
         animDiv.style.margin = '0';
         animDiv.style.marginLeft = '0';
-        animDiv.style.transition = 'left 150ms, top 150ms';
+        animDiv.style.transition = 'left 150ms, top 150ms, opacity 300ms';
         animDiv.style.zIndex = 30;
         document.body.appendChild(animDiv);
 
@@ -177,13 +177,12 @@ function showMenu(options) {
 
         // After animation, restore menu
         setTimeout(() => {
-            document.body.removeChild(animDiv);
-
             // Set selected to the unstacked option
             selected = menuOptions.findIndex(opt => opt.label === stackedText);
             if (selected === -1) selected = 0;
 
             // Show menu again
+            menuDiv.style.transition = 'opacity 300ms';
             menuDiv.style.display = 'flex';
             menuDiv.style.opacity = 0;
             document.body.appendChild(menuDiv);
@@ -191,15 +190,16 @@ function showMenu(options) {
 
             setTimeout(() => {
                 menuDiv.style.opacity = 1;
-            }, 1);
-        }, 80);
+                animDiv.style.opacity = 0;
+            }, 20);
+            setTimeout(() => {
+                // Remove the animated div after animation
+                if (animDiv.parentNode) {
+                    animDiv.parentNode.removeChild(animDiv);
+                }
+            }, 500);
+        }, 120);
 
-        setTimeout(() => {
-            // Remove the animated div after animation
-            if (animDiv.parentNode) {
-                animDiv.parentNode.removeChild(animDiv);
-            }
-        }, 180);
     }
 
     return { moveUp, moveDown, getSelected, menuDiv, stackOption, unstackOption };
