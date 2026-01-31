@@ -31,10 +31,29 @@
         </svg>
     </div>
     <script src="logo.js"></script>
+    <script src="grid.js"></script>
     <script src="menu.js"></script>
     <script src="window.js"></script>
     <script>
          function createMenu() {
+            // Initialize grid
+            const graphSvg = document.getElementById('main');
+            const grid = createGrid(graphSvg);
+
+            setTimeout(() => {
+                grid.setBox('in', { label: 'IN' }, 0, 0);
+            }, 500);
+            setTimeout(() => {
+                grid.setBox('out', { label: 'OUT' }, 0, 1);
+            }, 1000);
+            setTimeout(() => {
+                grid.setSize(2,3)
+                grid.setBox('out', { label: 'OUT' }, 1, 2);
+                grid.setBox('eff', { label: 'DEL' }, 0, 1);
+                grid.addLine('in', 'eff');
+                grid.addLine('eff', 'out');
+            }, 1500);
+
             // Test menu
             let menu = showMenu([
                 { label: 'Add Input >' },

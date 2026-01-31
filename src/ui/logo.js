@@ -1,4 +1,11 @@
+let skip=true
+
 async function loadLogo(ratio, bulletCallback, doneCallback) {
+    if(skip) {
+        bulletCallback
+        doneCallback();
+        return;
+    }
     const response = await fetch('logo.svg');
     const svgText = await response.text();
     const parser = new DOMParser();
@@ -19,9 +26,9 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
     svg.style.top = '25%';
     svg.style.transform = 'translate(-50%, -50%) scaleY(1)';
     svg.style.zIndex = '-1';
-    svg.style.pointerEvents = 'none';       
+    svg.style.pointerEvents = 'none';
     document.body.appendChild(svg);
-    
+
     const duration = 1.2;
     const gap = 0.1; // seconds
 
@@ -31,7 +38,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
         const length = path.getTotalLength();
         path.style.strokeDasharray = length;
         path.style.strokeDashoffset = length;
-        
+
         // Create laser point
         const point = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
         point.setAttribute('fill', '#00ff0000');
@@ -39,7 +46,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
         point.classList.add('laser-point');
 
         svg.appendChild(point);
-        
+
         const delay = index * gap;
 
         // Animate the path drawing
@@ -47,7 +54,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
             path.style.transition = `stroke-dashoffset ${duration}s ease-out`;
             path.style.strokeDashoffset = '0';
             path.style.stroke = '#1e2828'
-            
+
             // Animate the laser point along the path
             let start = null;
             let highlight = null;
@@ -55,21 +62,21 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
             const animate = (timestamp) => {
                 if (!start) start = timestamp;
                 const progress = Math.min(2*(timestamp - start) / (duration * 1000), 2);
-                
+
                 const currentLength = Math.abs(length * (1 - progress));
-                
+
                 const pointOnPath = path.getPointAtLength(length - currentLength);
                 point.setAttribute('cx', pointOnPath.x);
                 point.setAttribute('cy', pointOnPath.y);
                 point.setAttribute('fill', Math.random() > 0.2 ? '#66ffff' : '#ffffff');
-                if (progress < 1) {                    
+                if (progress < 1) {
                     point.setAttribute('r', 2 + (2 + progress*10)*Math.random());
                     requestAnimationFrame(animate);
-                } else if (progress < 2) {      
-                    point.setAttribute('r', 14*Math.random());              
+                } else if (progress < 2) {
+                    point.setAttribute('r', 14*Math.random());
                     if (part === 0) {
                         // Start highlight animation
-                        part = 1;                        
+                        part = 1;
                         setTimeout(() => point.remove(), 400);
                         highlight = path.cloneNode();
                         highlight.setAttribute('id', 'highlight-'+index);
@@ -86,28 +93,28 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
                         // Fade out highlight
                         point.setAttribute('opacity', 2 - progress);
                         highlight.style.strokeWidth = 28 - progress * 12
-                        const blur = svg.querySelector('filter#glow feGaussianBlur');                        
+                        const blur = svg.querySelector('filter#glow feGaussianBlur');
                         blur.setAttribute('stdDeviation', 20 - progress * 6);
                         highlight.style.strokeOpacity = 1 - Math.random() * (2 - progress);
-                        const flood = svg.querySelector('filter#glow feFlood');                        
-                        flood.setAttribute('flood-opacity', 1 - progress / 2);                
+                        const flood = svg.querySelector('filter#glow feFlood');
+                        flood.setAttribute('flood-opacity', 1 - progress / 2);
                         requestAnimationFrame(animate);
                     }
                 }
             };
             requestAnimationFrame(animate);
         }, delay * 1000);
-    });    
+    });
 
-    
+
     //After all path animations, collapse the svg vertically
     const totalDelay = duration;
 
-    setTimeout(() => {        
+    setTimeout(() => {
         bulletCallback();
     }, totalDelay * 1000);
 
-    setTimeout(() => {        
+    setTimeout(() => {
         setTimeout(() => {
             doneCallback();
             svg.style.transition = 'transform 0.7s, opacity 0.3s';
@@ -118,7 +125,7 @@ async function loadLogo(ratio, bulletCallback, doneCallback) {
             setTimeout(() => {
                 svg.remove();
             }, 500);
-        }, 300);         
+        }, 300);
     }, totalDelay * 1000 + 500);
 
 }

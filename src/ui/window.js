@@ -13,7 +13,7 @@ function init(callback) {
         () => {
             const line = document.getElementById('line');
             line.style.transition = 'stroke-opacity 0.4s ease-in';
-            line.setAttribute('stroke-opacity', 1);
+            //line.setAttribute('stroke-opacity', 1);
             const bullet = document.getElementById('bullet');
             bullet.style.transition = 'stroke-width 0.4s ease-in';
             bullet.setAttribute('stroke-width', 1);
