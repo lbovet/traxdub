@@ -1,5 +1,13 @@
+// Global menu stack to track nested menus
+let menuStack = [];
+let currentMenu = null;
 
 function showMenu(options) {
+    // If there's already a current menu, stack it first
+    if (currentMenu) {
+        currentMenu.stackOption();
+    }
+
     let selected = 0;
     let menuOptions = options;
     let menuDiv = document.createElement('div');
@@ -17,7 +25,12 @@ function showMenu(options) {
     menuDiv.style.marginTop = `${Math.max(0, (6 - options.length) * 1.2)}em`;
     menuDiv.style.zIndex = 10;
     menuDiv.style.opacity = 0;
-    menuDiv.style.transition = 'opacity 1s';
+    if(currentMenu) {
+        menuDiv.style.transition = 'opacity 300ms';
+    } else {
+        menuDiv.style.transition = 'opacity 1s';
+    }
+
     setTimeout(() => {
         menuDiv.style.opacity = 1;
     }, 100);
@@ -43,23 +56,20 @@ function showMenu(options) {
     }
     render();
 
-    function moveUp() {
-        selected = (selected - 1 + menuOptions.length) % menuOptions.length;
-        render();
-    }
-    function moveDown() {
-        selected = (selected + 1) % menuOptions.length;
-        render();
-    }
-    function getSelected() {
-        return menuOptions[selected];
-    }
     document.body.appendChild(menuDiv);
 
     // Stack option method
     function stackOption() {
         const selectedDiv = optionDivs.find(div => div.classList.contains('selected'));
         if (!selectedDiv) return;
+
+        // Push current menu state to stack
+        menuStack.push({
+            options: menuOptions,
+            selected: selected,
+            menuDiv: menuDiv
+        });
+
         // Create or get the optionStack div
         let optionStack = document.getElementById('optionStack');
         if (!optionStack) {
@@ -147,7 +157,9 @@ function showMenu(options) {
 
         // Increase top margin by 1.2em
         let currentMargin = parseFloat(optionStack.style.marginTop) || 0;
-        optionStack.style.marginTop = (currentMargin + 1.2) + 'em';
+        if(optionStack.children.length < 5) {
+            optionStack.style.marginTop = (currentMargin + 1.2) + 'em';
+        }
 
         // If stack is now empty, remove it
         if (optionStack.children.length === 0) {
@@ -165,7 +177,7 @@ function showMenu(options) {
         animDiv.style.top = originalY + 'px';
         animDiv.style.margin = '0';
         animDiv.style.marginLeft = '0';
-        animDiv.style.transition = 'left 150ms, top 150ms, opacity 300ms';
+        animDiv.style.transition = 'left 150ms, top 150ms, opacity 500ms';
         animDiv.style.zIndex = 30;
         document.body.appendChild(animDiv);
 
@@ -197,10 +209,75 @@ function showMenu(options) {
                 if (animDiv.parentNode) {
                     animDiv.parentNode.removeChild(animDiv);
                 }
-            }, 500);
+            }, 600);
         }, 120);
+    }
+
+    // Close method - closes current menu and returns to previous
+    function _close() {
+        if (menuStack.length === 0) return;
+
+        // Get previous menu from stack
+        const previousMenu = menuStack.pop();
+
+        // Fade out current menu
+        if (menuDiv.parentNode) {
+            menuDiv.style.transition = 'opacity 150ms';
+            menuDiv.style.opacity = 0;
+        }
+
+        // Restore previous menu state
+        menuOptions = previousMenu.options;
+        selected = previousMenu.selected;
+        menuDiv = previousMenu.menuDiv;
+
+        // Re-render with restored state
+        render();
+        unstackOption();
+
+        // Update currentMenu to the restored menu
+        currentMenu = {
+            moveUp: () => currentMenu && currentMenu._moveUp(),
+            moveDown: () => currentMenu && currentMenu._moveDown(),
+            getSelected: () => currentMenu && currentMenu._getSelected(),
+            close: () => currentMenu && currentMenu._close(),
+            stackOption,
+            unstackOption,
+            menuDiv,
+            _moveUp: () => {
+                selected = (selected - 1 + menuOptions.length) % menuOptions.length;
+                render();
+            },
+            _moveDown: () => {
+                selected = (selected + 1) % menuOptions.length;
+                render();
+            },
+            _getSelected: () => menuOptions[selected],
+            _close
+        };
 
     }
 
-    return { moveUp, moveDown, getSelected, menuDiv, stackOption, unstackOption };
+    const menu = {
+        moveUp: () => currentMenu && currentMenu._moveUp(),
+        moveDown: () => currentMenu && currentMenu._moveDown(),
+        getSelected: () => currentMenu && currentMenu._getSelected(),
+        close: () => currentMenu && currentMenu._close(),
+        stackOption,
+        unstackOption,
+        menuDiv,
+        // Internal methods that actually do the work
+        _moveUp: () => {
+            selected = (selected - 1 + menuOptions.length) % menuOptions.length;
+            render();
+        },
+        _moveDown: () => {
+            selected = (selected + 1) % menuOptions.length;
+            render();
+        },
+        _getSelected: () => menuOptions[selected],
+        _close
+    };
+    currentMenu = menu;
+    return menu;
 }

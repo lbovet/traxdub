@@ -47,9 +47,12 @@
                 } else if (e.key === 'ArrowDown') {
                     menu.moveDown();
                 } else if (e.key === 'Enter') {
-                    menu.stackOption();
+                    showMenu([
+                        { label: 'Audio >' },
+                        { label: 'Midi >' },
+                    ]);
                 } else if (e.key === 'Backspace') {
-                    menu.unstackOption();
+                    menu.close();
                 }
             });
         };
