@@ -12,17 +12,16 @@
                 <g id="thin-layer" transform="translate(0.5,0.5)">
                     <line id="line" x1="905" y1="1000" x2="1095" y2="1000"
                         style="stroke-linecap: round;"
-                        stroke-opacity="0"
                         stroke="#66ffff"
                         stroke-width="1"/>
-                        <circle
-                            id="bullet"
-                            cx="1000"
-                            cy="1000"
-                            r="0"
-                            stroke="#1e2828"
-                            stroke-width="0"
-                            fill="#66ffff" />
+                    <circle
+                        id="bullet"
+                        cx="1000"
+                        cy="1000"
+                        r="0"
+                        stroke="#1e2828"
+                        stroke-width="0"
+                        fill="#66ffff" />
                 </g>
 
                 <g id="thick-layer">
@@ -41,21 +40,23 @@
             const grid = createGrid(graphSvg);
 
             setTimeout(() => {
-                grid.setBox('in', { label: 'IN' }, 0, 0);
+                grid.setBox('in', { label: 'IN', invisible: true }, 0, 0);
                 grid.commit();
             }, 500);
             setTimeout(() => {
-                grid.setBox('out', { label: 'OUT' }, 0, 1);
+                grid.setBox('out', { label: 'OUT', invisible: true }, 0, 1);
+                grid.addLine('in', 'out');
                 grid.commit();
             }, 1000);
-            setTimeout(() => {
+            /*setTimeout(() => {
+                grid.removeLine('in', 'out');
                 grid.setSize(2,3)
                 grid.setBox('eff', { label: 'DEL' }, 0, 1);
                 grid.addLine('in', 'eff');
                 grid.addLine('eff', 'out');
                 grid.setBox('out', { label: 'OUT' }, 1, 2);
                 grid.commit();
-            }, 1500);
+            }, 9500);*/
 
             // Test menu
             let menu = showMenu([

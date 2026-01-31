@@ -94,6 +94,15 @@ function createGrid(svgElement) {
             rect.setAttribute('x', '0');
             text.setAttribute('x', boxWidth / 2); // Center text in box
 
+            // Handle invisible boxes
+            if (box.invisible) {
+                rect.style.opacity = '0';
+                text.style.opacity = '0';
+            } else {
+                rect.style.opacity = '1';
+                text.style.opacity = '1';
+            }
+
             // Mark this box as having pending changes
             pendingChanges.add(id);
         } else {
@@ -108,7 +117,7 @@ function createGrid(svgElement) {
             text.setAttribute('dominant-baseline', 'middle');
             text.setAttribute('fill', '#66ffff');
             text.setAttribute('font-size', '20');
-            text.setAttribute('opacity', '0'); // Start invisible
+            text.setAttribute('opacity', '0'); // Start invisible for animation
             text.textContent = box.label;
 
             // Add text first to measure it
@@ -130,6 +139,7 @@ function createGrid(svgElement) {
             rect.setAttribute('stroke', '#66ffff');
             rect.setAttribute('stroke-width', '1');
             rect.setAttribute('fill', '#1a1a1a');
+            rect.setAttribute('opacity', box.invisible ? '0' : '1'); // Start invisible for animation
             rect.setAttribute('rx', '0.3');
 
             // Insert rect before text to render behind it
@@ -143,7 +153,11 @@ function createGrid(svgElement) {
                 text.style.transition = 'opacity 200ms ease-in-out';
                 rect.setAttribute('height', boxHeight);
                 rect.setAttribute('y', -boxHeight / 2);
-                text.setAttribute('opacity', '1');
+
+                // Only show if not invisible
+                if (!box.invisible) {
+                    text.setAttribute('opacity', '1');
+                }
             }, 20);
         }
     }
@@ -168,10 +182,10 @@ function createGrid(svgElement) {
         }, 250);
     }
 
-    function getBoxDimensions(id) {
+    function getBoxEnds(id) {
         if (!boxes.has(id)) return null;
 
-        const { group, row, col } = boxes.get(id);
+        const { box, group, row, col } = boxes.get(id);
         const rect = group.querySelector('rect');
         const width = parseFloat(rect.getAttribute('width'));
 
@@ -192,28 +206,36 @@ function createGrid(svgElement) {
             y = pos.y;
         }
 
-        return {
-            x: x,
-            y: y,
-            width: width,
-            height: boxHeight
-        };
+        // Swap connection points for invisible boxes
+        if (box.invisible) {
+            return {
+                inX: x + width,   // Right edge for invisible - incoming
+                outX: x,          // Left edge for invisible - outgoing
+                y: y
+            };
+        } else {
+            return {
+                inX: x,           // Left edge - incoming line attachment point
+                outX: x + width,  // Right edge - outgoing line attachment point
+                y: y
+            };
+        }
     }
 
     function calculateLinePath(fromId, toId) {
-        const fromBox = getBoxDimensions(fromId);
-        const toBox = getBoxDimensions(toId);
+        const fromBox = getBoxEnds(fromId);
+        const toBox = getBoxEnds(toId);
 
         if (!fromBox || !toBox) return '';
 
-        // First segment: horizontal from right middle of fromBox, 10 units long
-        const x1 = fromBox.x + fromBox.width;
+        // First segment: horizontal from right edge of fromBox, 15 units long
+        const x1 = fromBox.outX;
         const y1 = Math.floor(fromBox.y);
         const x2 = x1 + 15;
         const y2 = Math.floor(y1);
 
-        // Third segment: horizontal to left middle of toBox, starting 10 units before
-        const x4 = toBox.x;
+        // Third segment: horizontal to left edge of toBox, starting 15 units before
+        const x4 = toBox.inX;
         const y4 = Math.floor(toBox.y);
         const x3 = x4 - 15;
         const y3 = Math.floor(y4);
@@ -225,15 +247,6 @@ function createGrid(svgElement) {
            // Create path with three segments
             return `M ${x1} ${y1} L ${x2} ${y2} L ${x3} ${y3} L ${x4} ${y4}`;
         }
-    }
-
-    function updateLinesForBox(boxId) {
-        lines.forEach(({ fromId, toId, path }, key) => {
-            if (fromId === boxId || toId === boxId) {
-                const pathData = calculateLinePath(fromId, toId);
-                path.setAttribute('d', pathData);
-            }
-        });
     }
 
     function updateAllLines() {
@@ -265,6 +278,16 @@ function createGrid(svgElement) {
 
         linesGroup.appendChild(path);
         lines.set(key, { fromId, toId, path });
+    }
+
+    function removeLine(fromId, toId) {
+        const key = `${fromId}-${toId}`;
+
+        if (!lines.has(key)) return;
+
+        const { path } = lines.get(key);
+        linesGroup.removeChild(path);
+        lines.delete(key);
     }
 
     function commit() {
@@ -314,6 +337,7 @@ function createGrid(svgElement) {
         setBox,
         removeBox,
         addLine,
+        removeLine,
         commit
     };
 }
