@@ -3,6 +3,9 @@ function createGrid(svgElement) {
     let columnCount = 2;
     let boxes = new Map(); // id -> { box, row, col, group }
     let lines = new Map(); // key -> { fromId, toId, path }
+    let animatingBoxes = new Map(); // id -> { startPos, endPos, startTime, duration }
+    let pendingChanges = new Set(); // Set of box ids with pending position changes
+    let pendingSizeChange = false;
 
     const svgNS = "http://www.w3.org/2000/svg";
     const verticalSpacing = 48;
@@ -62,19 +65,12 @@ function createGrid(svgElement) {
     function setSize(newRowCount, newColumnCount) {
         rowCount = newRowCount;
         columnCount = newColumnCount;
+        pendingSizeChange = true;
 
-        // Animate all existing boxes to their new positions
-        boxes.forEach(({ box, row, col, group }) => {
-            const pos = getCellPosition(row, col);
-            const rect = group.querySelector('rect');
-            const text = group.querySelector('text');
-
-            group.style.transition = 'transform 300ms ease-in-out';
-            group.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+        // Mark all boxes as having pending changes
+        boxes.forEach((_, id) => {
+            pendingChanges.add(id);
         });
-
-        // Update all lines
-        updateAllLines();
     }
 
     function setBox(id, box, row, col) {
@@ -98,12 +94,8 @@ function createGrid(svgElement) {
             rect.setAttribute('x', '0');
             text.setAttribute('x', boxWidth / 2); // Center text in box
 
-            // Animate to new position
-            existing.group.style.transition = 'transform 300ms ease-in-out';
-            existing.group.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
-
-            // Update lines connected to this box
-            updateLinesForBox(id);
+            // Mark this box as having pending changes
+            pendingChanges.add(id);
         } else {
             // Create new box
             const group = document.createElementNS(svgNS, 'g');
@@ -164,8 +156,8 @@ function createGrid(svgElement) {
         const text = group.querySelector('text');
 
         // Animate collapse
-        rect.style.transition = 'height 300ms ease-in-out, y 300ms ease-in-out';
-        text.style.transition = 'opacity 300ms ease-in-out';
+        rect.style.transition = 'height 250ms ease-in-out, y 250ms ease-in-out';
+        text.style.transition = 'opacity 250ms ease-in-out';
         rect.setAttribute('height', '0');
         rect.setAttribute('y', '0');
         text.setAttribute('opacity', '0');
@@ -173,7 +165,7 @@ function createGrid(svgElement) {
         setTimeout(() => {
             boxesGroup.removeChild(group);
             boxes.delete(id);
-        }, 300);
+        }, 250);
     }
 
     function getBoxDimensions(id) {
@@ -181,12 +173,28 @@ function createGrid(svgElement) {
 
         const { group, row, col } = boxes.get(id);
         const rect = group.querySelector('rect');
-        const pos = getCellPosition(row, col);
         const width = parseFloat(rect.getAttribute('width'));
 
+        let x, y;
+
+        // Check if box is currently animating
+        if (animatingBoxes.has(id)) {
+            const { startPos, endPos, startTime, duration } = animatingBoxes.get(id);
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+
+            // Linear interpolation
+            x = startPos.x + (endPos.x - startPos.x) * progress;
+            y = startPos.y + (endPos.y - startPos.y) * progress;
+        } else {
+            const pos = getCellPosition(row, col);
+            x = pos.x;
+            y = pos.y;
+        }
+
         return {
-            x: pos.x,
-            y: pos.y,
+            x: x,
+            y: y,
             width: width,
             height: boxHeight
         };
@@ -259,10 +267,53 @@ function createGrid(svgElement) {
         lines.set(key, { fromId, toId, path });
     }
 
+    function commit() {
+        if (pendingChanges.size === 0) return;
+
+        const startTime = Date.now();
+        const duration = 300;
+
+        // Animate all boxes with pending changes
+        pendingChanges.forEach(id => {
+            if (!boxes.has(id)) return;
+
+            const { row, col, group } = boxes.get(id);
+            const currentTransform = group.getAttribute('transform');
+            const match = currentTransform.match(/translate\(([^,]+),\s*([^)]+)\)/);
+            const startPos = match ? { x: parseFloat(match[1]), y: parseFloat(match[2]) } : { x: 0, y: 0 };
+            const endPos = getCellPosition(row, col);
+
+            animatingBoxes.set(id, { startPos, endPos, startTime, duration });
+
+            group.style.transition = 'transform 300ms linear';
+            group.setAttribute('transform', `translate(${endPos.x}, ${endPos.y})`);
+        });
+
+        // Clear pending changes
+        pendingChanges.clear();
+        pendingSizeChange = false;
+
+        // Continuously update lines during animation
+        function animateLines() {
+            const elapsed = Date.now() - startTime;
+            updateAllLines();
+
+            if (elapsed < duration) {
+                requestAnimationFrame(animateLines);
+            } else {
+                // Clear animation state
+                animatingBoxes.clear();
+            }
+        }
+
+        requestAnimationFrame(animateLines);
+    }
+
     return {
         setSize,
         setBox,
         removeBox,
-        addLine
+        addLine,
+        commit
     };
 }

@@ -42,16 +42,19 @@
 
             setTimeout(() => {
                 grid.setBox('in', { label: 'IN' }, 0, 0);
+                grid.commit();
             }, 500);
             setTimeout(() => {
                 grid.setBox('out', { label: 'OUT' }, 0, 1);
+                grid.commit();
             }, 1000);
             setTimeout(() => {
                 grid.setSize(2,3)
-                grid.setBox('out', { label: 'OUT' }, 1, 2);
                 grid.setBox('eff', { label: 'DEL' }, 0, 1);
                 grid.addLine('in', 'eff');
                 grid.addLine('eff', 'out');
+                grid.setBox('out', { label: 'OUT' }, 1, 2);
+                grid.commit();
             }, 1500);
 
             // Test menu
