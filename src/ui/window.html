@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.2">
-    <link rel="stylesheet" href="style.css">    
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="full-page-wrapper">
@@ -14,19 +14,19 @@
                         style="stroke-linecap: round;"
                         stroke-opacity="0"
                         stroke="#66ffff"
-                        stroke-width="1"/> 
-                        <circle 
-                            id="bullet" 
-                            cx="1000" 
-                            cy="1000" 
-                            r="0" 
-                            stroke="#1e2828" 
+                        stroke-width="1"/>
+                        <circle
+                            id="bullet"
+                            cx="1000"
+                            cy="1000"
+                            r="0"
+                            stroke="#1e2828"
                             stroke-width="0"
-                            fill="#66ffff" />                
+                            fill="#66ffff" />
                 </g>
 
                 <g id="thick-layer">
-                </g>            
+                </g>
             </g>
         </svg>
     </div>
@@ -49,10 +49,10 @@
                 line.setAttribute('stroke-opacity', 1);
                 const bullet = document.getElementById('bullet');
                 bullet.style.transition = 'stroke-width 0.4s ease-in';
-                bullet.setAttribute('stroke-width', 1);     
+                bullet.setAttribute('stroke-width', 1);
                 setTimeout(() => {
                     createMenu();
-                }, 100);           
+                }, 100);
             });
             document.body.classList.add('loaded');
             window.ipc.postMessage('page-loaded');
@@ -71,10 +71,12 @@
                     menu.moveDown();
                 } else if (e.key === 'Enter') {
                     menu.stackOption();
+                } else if (e.key === 'Backspace') {
+                    menu.unstackOption();
                 }
             });
         };
-        
+
         function updateSize() {
             const svg = document.getElementById('main');
             if (!svg) return;

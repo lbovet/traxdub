@@ -18,13 +18,14 @@ function showMenu(options) {
     menuDiv.style.opacity = 0;
     menuDiv.style.transition = 'opacity 1s';
     setTimeout(() => {
-        menuDiv.style.opacity = 1;         
+        menuDiv.style.opacity = 1;
+        menuDiv.style.transition = 'opacity 0.2s';
     }, 100);
-    
+
     // Option elements
     let optionDivs = [];
     function render() {
-        menuDiv.innerHTML = '';    
+        menuDiv.innerHTML = '';
         const maxVisible = 10;
         const visibleCount = Math.min(maxVisible, menuOptions.length);
         const halfAbove = Math.floor((visibleCount - 1) / 2);
@@ -43,7 +44,7 @@ function showMenu(options) {
     render();
 
     function moveUp() {
-        selected = (selected - 1 + menuOptions.length) % menuOptions.length;       
+        selected = (selected - 1 + menuOptions.length) % menuOptions.length;
         render();
     }
     function moveDown() {
@@ -54,6 +55,7 @@ function showMenu(options) {
         return menuOptions[selected];
     }
     document.body.appendChild(menuDiv);
+
     // Stack option method
     function stackOption() {
         const selectedDiv = optionDivs.find(div => div.classList.contains('selected'));
@@ -79,11 +81,9 @@ function showMenu(options) {
         optionStack.style.marginTop = newMargin + 'em';
         // Animate selected option to left
         const rect = selectedDiv.getBoundingClientRect();
-        const menuRect = menuDiv.getBoundingClientRect();
         const startX = rect.left;
         const startY = rect.top;
         const endX = 30 + optionStack.children.length * 10; // px from left
-        const endY = startY;
         // Clone for animation
         const animDiv = selectedDiv.cloneNode(true);
         animDiv.style.position = 'fixed';
@@ -105,7 +105,6 @@ function showMenu(options) {
         // Animate
         setTimeout(() => {
             animDiv.style.left = endX + 'px';
-            animDiv.style.color = '#067575'; // unselected color
         }, 10);
         // After animation, move to stack and cleanup
         setTimeout(() => {
@@ -114,13 +113,94 @@ function showMenu(options) {
             animDiv.style.top = '';
             animDiv.style.margin = '';
             animDiv.style.transition = '';
-            animDiv.classList.remove('selected');
+            // Store original position for unstacking
+            animDiv.dataset.originalX = startX;
+            animDiv.dataset.originalY = startY;
             // Indent each new item by 10px more than the previous
             const stackCount = optionStack.children.length;
             animDiv.style.marginLeft = (10 * (stackCount + 1)) + 'px';
             optionStack.appendChild(animDiv);
-            //if (menuDiv.parentNode) menuDiv.parentNode.removeChild(menuDiv);
+            if (menuDiv.parentNode) menuDiv.parentNode.removeChild(menuDiv);
         }, 170);
     }
-    return { moveUp, moveDown, getSelected, menuDiv, stackOption };
+
+    // Unstack option method - reverses stackOption
+    function unstackOption() {
+        const optionStack = document.getElementById('optionStack');
+        if (!optionStack || optionStack.children.length === 0) return;
+
+        // Get the last stacked item
+        const lastStacked = optionStack.lastElementChild;
+        const stackedText = lastStacked.textContent;
+
+        // Find the option that was stacked
+        const stackedOption = menuOptions.find(opt => opt.label === stackedText);
+        if (!stackedOption) return;
+
+        // Get the position of the stacked element before animation
+        const rect = lastStacked.getBoundingClientRect();
+        const startX = rect.left;
+        const startY = rect.top;
+
+        // Remove from stack
+        optionStack.removeChild(lastStacked);
+
+        // Increase top margin by 1.2em
+        let currentMargin = parseFloat(optionStack.style.marginTop) || 0;
+        optionStack.style.marginTop = (currentMargin + 1.2) + 'em';
+
+        // If stack is now empty, remove it
+        if (optionStack.children.length === 0) {
+            optionStack.parentNode.removeChild(optionStack);
+        }
+
+        // Get original position from stored data
+        const originalX = parseFloat(lastStacked.dataset.originalX);
+        const originalY = parseFloat(lastStacked.dataset.originalY);
+
+        // Position the item for animation
+        const animDiv = lastStacked.cloneNode(true);
+        animDiv.style.position = 'fixed';
+        animDiv.style.left = startX + 'px';
+        animDiv.style.top = originalY + 'px';
+        animDiv.style.margin = '0';
+        animDiv.style.marginLeft = '0';
+        animDiv.style.transition = 'left 150ms, top 150ms';
+        animDiv.style.zIndex = 30;
+        document.body.appendChild(animDiv);
+
+        // Animate back to original position
+        setTimeout(() => {
+            animDiv.style.left = originalX + 'px';
+            animDiv.style.top = originalY + 'px';
+        }, 10);
+
+        // After animation, restore menu
+        setTimeout(() => {
+            document.body.removeChild(animDiv);
+
+            // Set selected to the unstacked option
+            selected = menuOptions.findIndex(opt => opt.label === stackedText);
+            if (selected === -1) selected = 0;
+
+            // Show menu again
+            menuDiv.style.display = 'flex';
+            menuDiv.style.opacity = 0;
+            document.body.appendChild(menuDiv);
+            render();
+
+            setTimeout(() => {
+                menuDiv.style.opacity = 1;
+            }, 1);
+        }, 80);
+
+        setTimeout(() => {
+            // Remove the animated div after animation
+            if (animDiv.parentNode) {
+                animDiv.parentNode.removeChild(animDiv);
+            }
+        }, 180);
+    }
+
+    return { moveUp, moveDown, getSelected, menuDiv, stackOption, unstackOption };
 }
