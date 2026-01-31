@@ -1,4 +1,4 @@
-let ratio = 1.2;
+let ratio = 1.0;
 const size = 2000;
 document.getElementById('main').setAttribute('width', size * ratio);
 document.getElementById('main').setAttribute('height', size * ratio);

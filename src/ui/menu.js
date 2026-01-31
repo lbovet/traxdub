@@ -13,16 +13,16 @@ function showMenu(options) {
     let menuDiv = document.createElement('div');
     menuDiv.className = 'menu-container';
     menuDiv.style.position = 'fixed';
+    menuDiv.style.left = 'calc(50% - 95px)';
     menuDiv.style.top = '50%';
     menuDiv.style.display = 'flex';
     menuDiv.style.flexDirection = 'column';
-    menuDiv.style.alignItems = 'center';
-    menuDiv.style.justifyContent = 'center';
     menuDiv.style.userSelect = 'none';
     menuDiv.style.background = 'none';
     menuDiv.style.border = 'none';
     menuDiv.style.outline = 'none';
-    menuDiv.style.marginTop = `${Math.max(0, (6 - options.length) * 1.2)}em`;
+    menuDiv.style.marginTop = `${Math.max(0, (5 - Math.ceil(options.length/2))
+         * 1.2)}em`;
     menuDiv.style.zIndex = 10;
     menuDiv.style.opacity = 0;
     if(currentMenu) {
