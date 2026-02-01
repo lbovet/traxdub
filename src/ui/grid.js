@@ -554,10 +554,18 @@ function createGrid(svgElement) {
             }
             const targetPos = { x: targetX, y: pos.y };
 
+            // Position circle at starting position first (no transition)
+            focusCircle.style.transition = 'none';
+            focusCircle.setAttribute('cx', startPos.x);
+            focusCircle.setAttribute('cy', startPos.y);
+            focusCircle.style.display = 'block';
+
             // Animate circle from line to box
-            focusCircle.style.transition = 'cx 80ms ease-out, cy 80ms ease-out';
-            focusCircle.setAttribute('cx', targetPos.x);
-            focusCircle.setAttribute('cy', targetPos.y);
+            setTimeout(() => {
+                focusCircle.style.transition = 'cx 80ms ease-out, cy 80ms ease-out';
+                focusCircle.setAttribute('cx', targetPos.x);
+                focusCircle.setAttribute('cy', targetPos.y);
+            }, 10);
 
             // Hide circle after animation
             circleHideTimeout = setTimeout(() => {
@@ -565,7 +573,7 @@ function createGrid(svgElement) {
                     focusCircle.style.display = 'none';
                 }
                 circleHideTimeout = null;
-            }, 200);
+            }, 80);
 
             // Set font weight to bold immediately
             const text = group.querySelector('text');
