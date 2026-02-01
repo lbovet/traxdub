@@ -10,6 +10,7 @@ function createGrid(svgElement) {
     let focusCircle = null; // Circle to indicate focused line
     let focusedElement = null; // { type: 'box'|'line', id: string }
     let lastFocusedLine = null; // Track last focused line for preference when returning from box
+    let circleHideTimeout = null; // Timeout for hiding the focus circle
 
     const svgNS = "http://www.w3.org/2000/svg";
     const verticalSpacing = 48;
@@ -493,6 +494,12 @@ function createGrid(svgElement) {
             linesGroup.appendChild(focusCircle);
         }
 
+        // Clear any pending hide timeout
+        if (circleHideTimeout) {
+            clearTimeout(circleHideTimeout);
+            circleHideTimeout = null;
+        }
+
         // If starting position provided, animate from there
         if (startPos) {
             focusCircle.setAttribute('cx', startPos.x);
@@ -538,12 +545,12 @@ function createGrid(svgElement) {
             const rect = group.querySelector('rect');
             const boxWidth = parseFloat(rect.getAttribute('width'));
 
-            // Calculate target position at box border
+            // Calculate target position 15 units from box border
             let targetX;
             if (edge === 'right') {
-                targetX = pos.x + boxWidth; // Right edge
+                targetX = pos.x + boxWidth + 15; // 15 units left of right edge
             } else {
-                targetX = pos.x; // Left edge (default)
+                targetX = pos.x - 15; // 15 units right of left edge (default)
             }
             const targetPos = { x: targetX, y: pos.y };
 
@@ -553,10 +560,11 @@ function createGrid(svgElement) {
             focusCircle.setAttribute('cy', targetPos.y);
 
             // Hide circle after animation
-            setTimeout(() => {
+            circleHideTimeout = setTimeout(() => {
                 if (focusCircle) {
                     focusCircle.style.display = 'none';
                 }
+                circleHideTimeout = null;
             }, 200);
 
             // Set font weight to bold immediately
@@ -797,9 +805,9 @@ function createGrid(svgElement) {
             const selectedLine = preferredLine || nearestLine;
 
             if (selectedLine) {
-                // Calculate starting position at left edge of current box
+                // Calculate starting position 15 units from left edge of current box
                 const pos = getCellPosition(current.row, current.col);
-                const startPos = { x: pos.x, y: pos.y };
+                const startPos = { x: pos.x - 15, y: pos.y };
                 focusLine(selectedLine.fromId, selectedLine.toId, startPos);
             }
         } else if (focusedElement.type === 'line') {
@@ -854,11 +862,11 @@ function createGrid(svgElement) {
             const selectedLine = preferredLine || nearestLine;
 
             if (selectedLine) {
-                // Calculate starting position at right edge of current box
+                // Calculate starting position 15 units from right edge of current box
                 const pos = getCellPosition(current.row, current.col);
                 const rect = current.group.querySelector('rect');
                 const boxWidth = parseFloat(rect.getAttribute('width'));
-                const startPos = { x: pos.x + boxWidth, y: pos.y };
+                const startPos = { x: pos.x + boxWidth + 15, y: pos.y };
                 focusLine(selectedLine.fromId, selectedLine.toId, startPos);
             }
         } else if (focusedElement.type === 'line') {
