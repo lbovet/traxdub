@@ -806,9 +806,6 @@ function createGrid(svgElement) {
             // Navigate to the 'from' box (left/upstream box)
             const [fromId, toId] = focusedElement.id.split('-');
 
-            // Reset line preference when moving line-to-box
-            lastFocusedLine = null;
-
             // Calculate starting position at line midpoint and animate to right edge
             const lineKey = focusedElement.id;
             const { path } = lines.get(lineKey);
@@ -867,9 +864,6 @@ function createGrid(svgElement) {
         } else if (focusedElement.type === 'line') {
             // Navigate to the 'to' box (right/downstream box)
             const [fromId, toId] = focusedElement.id.split('-');
-
-            // Reset line preference when moving line-to-box
-            lastFocusedLine = null;
 
             // Calculate starting position at line midpoint and animate to left edge
             const lineKey = focusedElement.id;
