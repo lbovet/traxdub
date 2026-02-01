@@ -9,6 +9,7 @@ function createGrid(svgElement) {
     let firstCommit = true;
     let focusCircle = null; // Circle to indicate focused line
     let focusedElement = null; // { type: 'box'|'line', id: string }
+    let lastFocusedLine = null; // Track last focused line for preference when returning from box
 
     const svgNS = "http://www.w3.org/2000/svg";
     const verticalSpacing = 48;
@@ -514,6 +515,9 @@ function createGrid(svgElement) {
 
         // Track focused element
         focusedElement = { type: 'line', id: key };
+
+        // Save this as the last focused line for preference
+        lastFocusedLine = key;
     }
 
     function focusBox(id, startPos = null, edge = null) {
@@ -526,6 +530,9 @@ function createGrid(svgElement) {
 
         // If animating from a line, animate the circle to the box border
         if (startPos && focusCircle) {
+            // Unfocus previous element first
+            unfocus();
+
             const { row, col } = boxes.get(id);
             const pos = getCellPosition(row, col);
             const rect = group.querySelector('rect');
@@ -545,12 +552,16 @@ function createGrid(svgElement) {
             focusCircle.setAttribute('cx', targetPos.x);
             focusCircle.setAttribute('cy', targetPos.y);
 
-            // Hide circle after animation and focus the box
+            // Hide circle after animation
             setTimeout(() => {
                 if (focusCircle) {
                     focusCircle.style.display = 'none';
                 }
             }, 200);
+
+            // Set font weight to bold immediately
+            const text = group.querySelector('text');
+            text.style.fontWeight = 'bold';
 
             // Set focused element immediately
             focusedElement = { type: 'box', id };
@@ -594,6 +605,8 @@ function createGrid(svgElement) {
             });
 
             if (nearestBox) {
+                // Reset line preference when moving box-to-box
+                lastFocusedLine = null;
                 focusBox(nearestBox);
             }
         } else if (focusedElement.type === 'line') {
@@ -663,6 +676,8 @@ function createGrid(svgElement) {
 
             if (nearestLine) {
                 console.log(`  Focusing nearest line: ${nearestLine}`);
+                // Reset line preference when moving line-to-line
+                lastFocusedLine = null;
                 const [newFromId, newToId] = nearestLine.split('-');
                 focusLine(newFromId, newToId);
             } else {
@@ -696,6 +711,8 @@ function createGrid(svgElement) {
             });
 
             if (nearestBox) {
+                // Reset line preference when moving box-to-box
+                lastFocusedLine = null;
                 focusBox(nearestBox);
             }
         } else if (focusedElement.type === 'line') {
@@ -765,6 +782,8 @@ function createGrid(svgElement) {
 
             if (nearestLine) {
                 console.log(`  Focusing nearest line: ${nearestLine}`);
+                // Reset line preference when moving line-to-line
+                lastFocusedLine = null;
                 const [newFromId, newToId] = nearestLine.split('-');
                 focusLine(newFromId, newToId);
             } else {
@@ -783,12 +802,18 @@ function createGrid(svgElement) {
 
             let nearestLine = null;
             let minRowDistance = Infinity;
+            let preferredLine = null; // Check if last focused line is available
 
             // Check incoming lines (upstream)
             lines.forEach(({ fromId, toId }, lineKey) => {
                 if (toId === focusedElement.id) {
                     const fromBox = boxes.get(fromId);
                     if (!fromBox) return;
+
+                    // Check if this is the last focused line
+                    if (lastFocusedLine && lineKey === lastFocusedLine) {
+                        preferredLine = { fromId, toId };
+                    }
 
                     const rowDistance = Math.abs(fromBox.row - current.row);
                     if (rowDistance < minRowDistance) {
@@ -798,15 +823,21 @@ function createGrid(svgElement) {
                 }
             });
 
-            if (nearestLine) {
+            // Prefer the last focused line if available, otherwise use nearest
+            const selectedLine = preferredLine || nearestLine;
+
+            if (selectedLine) {
                 // Calculate starting position at left edge of current box
                 const pos = getCellPosition(current.row, current.col);
                 const startPos = { x: pos.x, y: pos.y };
-                focusLine(nearestLine.fromId, nearestLine.toId, startPos);
+                focusLine(selectedLine.fromId, selectedLine.toId, startPos);
             }
         } else if (focusedElement.type === 'line') {
             // Navigate to the 'from' box (left/upstream box)
             const [fromId, toId] = focusedElement.id.split('-');
+
+            // Reset line preference when moving line-to-box
+            lastFocusedLine = null;
 
             // Calculate starting position at line midpoint and animate to right edge
             const lineKey = focusedElement.id;
@@ -831,12 +862,18 @@ function createGrid(svgElement) {
 
             let nearestLine = null;
             let minRowDistance = Infinity;
+            let preferredLine = null; // Check if last focused line is available
 
             // Check outgoing lines (downstream)
             lines.forEach(({ fromId, toId }, lineKey) => {
                 if (fromId === focusedElement.id) {
                     const toBox = boxes.get(toId);
                     if (!toBox) return;
+
+                    // Check if this is the last focused line
+                    if (lastFocusedLine && lineKey === lastFocusedLine) {
+                        preferredLine = { fromId, toId };
+                    }
 
                     const rowDistance = Math.abs(toBox.row - current.row);
                     if (rowDistance < minRowDistance) {
@@ -846,17 +883,23 @@ function createGrid(svgElement) {
                 }
             });
 
-            if (nearestLine) {
+            // Prefer the last focused line if available, otherwise use nearest
+            const selectedLine = preferredLine || nearestLine;
+
+            if (selectedLine) {
                 // Calculate starting position at right edge of current box
                 const pos = getCellPosition(current.row, current.col);
                 const rect = current.group.querySelector('rect');
                 const boxWidth = parseFloat(rect.getAttribute('width'));
                 const startPos = { x: pos.x + boxWidth, y: pos.y };
-                focusLine(nearestLine.fromId, nearestLine.toId, startPos);
+                focusLine(selectedLine.fromId, selectedLine.toId, startPos);
             }
         } else if (focusedElement.type === 'line') {
             // Navigate to the 'to' box (right/downstream box)
             const [fromId, toId] = focusedElement.id.split('-');
+
+            // Reset line preference when moving line-to-box
+            lastFocusedLine = null;
 
             // Calculate starting position at line midpoint and animate to left edge
             const lineKey = focusedElement.id;
