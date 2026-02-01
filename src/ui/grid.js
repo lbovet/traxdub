@@ -50,7 +50,7 @@ function createGrid(svgElement) {
         // Determine starting box(es) based on focused element
         let startBoxIds = [];
         if (focusedElement.type === 'box') {
-            startBoxIds = [focusedElement.id];
+            startBoxIds = [focusedElement.id, focusedElement.id];
         } else if (focusedElement.type === 'line') {
             const [fromId, toId] = focusedElement.id.split('-');
             startBoxIds = [fromId, toId];
@@ -72,17 +72,14 @@ function createGrid(svgElement) {
 
         // BFS strictly downstream from starting boxes
         const reachable = new Set(startBoxIds);
-        let downstreamQueue = [...startBoxIds];
+        let downstreamQueue = [startBoxIds[1]];
         const downstreamVisited = new Set(startBoxIds);
 
         while (downstreamQueue.length > 0) {
             const currentId = downstreamQueue.shift();
-            console.log(`Visiting downstream: ${currentId}`);
-
             const downstreamBoxes = downstream.get(currentId) || [];
             for (const nextId of downstreamBoxes) {
                 if (!downstreamVisited.has(nextId)) {
-                    console.log(`  Found downstream: ${nextId}`);
                     downstreamVisited.add(nextId);
                     reachable.add(nextId);
                     downstreamQueue.push(nextId);
@@ -91,17 +88,15 @@ function createGrid(svgElement) {
         }
 
         // BFS strictly upstream from starting boxes
-        let upstreamQueue = [...startBoxIds];
+        let upstreamQueue = [startBoxIds[0]];
         const upstreamVisited = new Set(startBoxIds);
 
         while (upstreamQueue.length > 0) {
             const currentId = upstreamQueue.shift();
-            console.log(`Visiting upstream: ${currentId}`);
 
             const upstreamBoxes = upstream.get(currentId) || [];
             for (const nextId of upstreamBoxes) {
                 if (!upstreamVisited.has(nextId)) {
-                    console.log(`  Found upstream: ${nextId}`);
                     upstreamVisited.add(nextId);
                     reachable.add(nextId);
                     upstreamQueue.push(nextId);
@@ -111,8 +106,19 @@ function createGrid(svgElement) {
 
         // Update active property for all boxes
         boxes.forEach(({ box }, id) => {
-            console.log(`Box ${id} active: ${reachable.has(id)}`);
             box.active = reachable.has(id);
+        });
+
+        // Reorder lines: put active lines (connecting two active boxes) in front
+        lines.forEach(({ fromId, toId, path }) => {
+            const fromBox = boxes.get(fromId)?.box;
+            const toBox = boxes.get(toId)?.box;
+            const isActiveLine = (fromBox?.active !== false) && (toBox?.active !== false);
+
+            if (isActiveLine) {
+                // Move to end of parent (renders on top)
+                linesGroup.appendChild(path);
+            }
         });
     }
 
@@ -457,7 +463,7 @@ function createGrid(svgElement) {
         focusedElement = null;
     }
 
-    function focusLine(fromId, toId) {
+    function focusLine(fromId, toId, startPos = null) {
         const key = `${fromId}-${toId}`;
 
         if (!lines.has(key)) return;
@@ -486,22 +492,74 @@ function createGrid(svgElement) {
             linesGroup.appendChild(focusCircle);
         }
 
-        // Position the circle at the midpoint
-        focusCircle.setAttribute('cx', midPoint.x);
-        focusCircle.setAttribute('cy', midPoint.y);
-        focusCircle.style.display = 'block';
+        // If starting position provided, animate from there
+        if (startPos) {
+            focusCircle.setAttribute('cx', startPos.x);
+            focusCircle.setAttribute('cy', startPos.y);
+            focusCircle.style.display = 'block';
+
+            // Enable transition and move to midpoint
+            setTimeout(() => {
+                focusCircle.style.transition = 'cx 80ms ease-out, cy 80ms ease-out';
+                focusCircle.setAttribute('cx', midPoint.x);
+                focusCircle.setAttribute('cy', midPoint.y);
+            }, 10);
+        } else {
+            // No animation - just position at midpoint
+            focusCircle.style.transition = 'none';
+            focusCircle.setAttribute('cx', midPoint.x);
+            focusCircle.setAttribute('cy', midPoint.y);
+            focusCircle.style.display = 'block';
+        }
 
         // Track focused element
         focusedElement = { type: 'line', id: key };
     }
 
-    function focusBox(id) {
+    function focusBox(id, startPos = null, edge = null) {
         if (!boxes.has(id)) return;
+
+        const { box, group } = boxes.get(id);
+
+        // Don't focus invisible boxes
+        if (box.invisible) return;
+
+        // If animating from a line, animate the circle to the box border
+        if (startPos && focusCircle) {
+            const { row, col } = boxes.get(id);
+            const pos = getCellPosition(row, col);
+            const rect = group.querySelector('rect');
+            const boxWidth = parseFloat(rect.getAttribute('width'));
+
+            // Calculate target position at box border
+            let targetX;
+            if (edge === 'right') {
+                targetX = pos.x + boxWidth; // Right edge
+            } else {
+                targetX = pos.x; // Left edge (default)
+            }
+            const targetPos = { x: targetX, y: pos.y };
+
+            // Animate circle from line to box
+            focusCircle.style.transition = 'cx 80ms ease-out, cy 80ms ease-out';
+            focusCircle.setAttribute('cx', targetPos.x);
+            focusCircle.setAttribute('cy', targetPos.y);
+
+            // Hide circle after animation and focus the box
+            setTimeout(() => {
+                if (focusCircle) {
+                    focusCircle.style.display = 'none';
+                }
+            }, 200);
+
+            // Set focused element immediately
+            focusedElement = { type: 'box', id };
+            return;
+        }
 
         // Unfocus any currently focused element
         unfocus();
 
-        const { box, group } = boxes.get(id);
         const text = group.querySelector('text');
 
         // Set font weight
@@ -509,6 +567,308 @@ function createGrid(svgElement) {
 
         // Track focused element
         focusedElement = { type: 'box', id };
+    }
+
+    function moveFocusUp() {
+        if (!focusedElement) return;
+
+        if (focusedElement.type === 'box') {
+            // Find nearest box above in the same column
+            const current = boxes.get(focusedElement.id);
+            if (!current) return;
+
+            let nearestBox = null;
+            let minDistance = Infinity;
+
+            boxes.forEach(({ box, row, col }, id) => {
+                // Skip invisible boxes
+                if (box.invisible) return;
+
+                if (col === current.col && row < current.row) {
+                    const distance = current.row - row;
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestBox = id;
+                    }
+                }
+            });
+
+            if (nearestBox) {
+                focusBox(nearestBox);
+            }
+        } else if (focusedElement.type === 'line') {
+            // Navigate to closest line above that shares column with start or end box
+            const [fromId, toId] = focusedElement.id.split('-');
+            const fromBox = boxes.get(fromId);
+            const toBox = boxes.get(toId);
+            if (!fromBox || !toBox) return;
+
+            console.log(`moveFocusUp from line ${fromId}->${toId}`);
+            console.log(`  Current: fromBox col=${fromBox.col} row=${fromBox.row}, toBox col=${toBox.col} row=${toBox.row}`);
+
+            let nearestLine = null;
+            let minRowDistance = Infinity;
+
+            lines.forEach(({ fromId: lineFromId, toId: lineToId }, lineKey) => {
+                if (lineKey === focusedElement.id) return;
+
+                const lineFrom = boxes.get(lineFromId);
+                const lineTo = boxes.get(lineToId);
+                if (!lineFrom || !lineTo) return;
+
+                // Check if this line shares a column with current line's start or end
+                const sharesStartColumn = lineFrom.col === fromBox.col;
+                const sharesEndColumn = lineTo.col === toBox.col;
+
+                console.log(`  Checking line ${lineFromId}->${lineToId}: from col=${lineFrom.col} row=${lineFrom.row}, to col=${lineTo.col} row=${lineTo.row}`);
+                console.log(`    sharesStartColumn=${sharesStartColumn}, sharesEndColumn=${sharesEndColumn}`);
+
+                if (sharesStartColumn || sharesEndColumn) {
+                    let distance = -1;
+
+                    if (sharesStartColumn && sharesEndColumn) {
+                        // Both columns are shared - use maximum distance
+                        const startDistance = fromBox.row - lineFrom.row;
+                        const endDistance = toBox.row - lineTo.row;
+                        console.log(`    Both columns shared: startDistance=${startDistance}, endDistance=${endDistance}`);
+
+                        distance = Math.max(startDistance, endDistance);
+                        console.log(`    Using max distance: ${distance}`);
+                    } else if (sharesStartColumn) {
+                        const candidateRow = lineFrom.row;
+                        const currentRow = fromBox.row;
+                        if (candidateRow < currentRow) {
+                            distance = currentRow - candidateRow;
+                        }
+                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
+                    } else {
+                        const candidateRow = lineTo.row;
+                        const currentRow = toBox.row;
+                        if (candidateRow < currentRow) {
+                            distance = currentRow - candidateRow;
+                        }
+                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
+                    }
+
+                    if (distance > 0) {
+                        console.log(`    Line is above with distance ${distance}`);
+                        if (distance < minRowDistance) {
+                            minRowDistance = distance;
+                            nearestLine = lineKey;
+                            console.log(`    New nearest line!`);
+                        }
+                    }
+                }
+            });
+
+            if (nearestLine) {
+                console.log(`  Focusing nearest line: ${nearestLine}`);
+                const [newFromId, newToId] = nearestLine.split('-');
+                focusLine(newFromId, newToId);
+            } else {
+                console.log(`  No line found above`);
+            }
+        }
+    }
+
+    function moveFocusDown() {
+        if (!focusedElement) return;
+
+        if (focusedElement.type === 'box') {
+            // Find nearest box below in the same column
+            const current = boxes.get(focusedElement.id);
+            if (!current) return;
+
+            let nearestBox = null;
+            let minDistance = Infinity;
+
+            boxes.forEach(({ box, row, col }, id) => {
+                // Skip invisible boxes
+                if (box.invisible) return;
+
+                if (col === current.col && row > current.row) {
+                    const distance = row - current.row;
+                    if (distance < minDistance) {
+                        minDistance = distance;
+                        nearestBox = id;
+                    }
+                }
+            });
+
+            if (nearestBox) {
+                focusBox(nearestBox);
+            }
+        } else if (focusedElement.type === 'line') {
+            // Navigate to closest line below that shares column with start or end box
+            const [fromId, toId] = focusedElement.id.split('-');
+            const fromBox = boxes.get(fromId);
+            const toBox = boxes.get(toId);
+            if (!fromBox || !toBox) return;
+
+            console.log(`moveFocusDown from line ${fromId}->${toId}`);
+            console.log(`  Current: fromBox col=${fromBox.col} row=${fromBox.row}, toBox col=${toBox.col} row=${toBox.row}`);
+
+            let nearestLine = null;
+            let minRowDistance = Infinity;
+
+            lines.forEach(({ fromId: lineFromId, toId: lineToId }, lineKey) => {
+                if (lineKey === focusedElement.id) return;
+
+                const lineFrom = boxes.get(lineFromId);
+                const lineTo = boxes.get(lineToId);
+                if (!lineFrom || !lineTo) return;
+
+                // Check if this line shares a column with current line's start or end
+                const sharesStartColumn = lineFrom.col === fromBox.col;
+                const sharesEndColumn = lineTo.col === toBox.col;
+
+                console.log(`  Checking line ${lineFromId}->${lineToId}: from col=${lineFrom.col} row=${lineFrom.row}, to col=${lineTo.col} row=${lineTo.row}`);
+                console.log(`    sharesStartColumn=${sharesStartColumn}, sharesEndColumn=${sharesEndColumn}`);
+
+                if (sharesStartColumn || sharesEndColumn) {
+                    let distance = -1;
+
+                    if (sharesStartColumn && sharesEndColumn) {
+                        // Both columns are shared - use maximum distance
+                        const startDistance = lineFrom.row - fromBox.row;
+                        const endDistance = lineTo.row - toBox.row;
+                        console.log(`    Both columns shared: startDistance=${startDistance}, endDistance=${endDistance}`);
+
+                        distance = Math.max(startDistance, endDistance);
+                        console.log(`    Using max distance: ${distance}`);
+                    } else if (sharesStartColumn) {
+                        const candidateRow = lineFrom.row;
+                        const currentRow = fromBox.row;
+                        if (candidateRow > currentRow) {
+                            distance = candidateRow - currentRow;
+                        }
+                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
+                    } else {
+                        const candidateRow = lineTo.row;
+                        const currentRow = toBox.row;
+                        if (candidateRow > currentRow) {
+                            distance = candidateRow - currentRow;
+                        }
+                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
+                    }
+
+                    if (distance > 0) {
+                        console.log(`    Line is below with distance ${distance}`);
+                        if (distance < minRowDistance) {
+                            minRowDistance = distance;
+                            nearestLine = lineKey;
+                            console.log(`    New nearest line!`);
+                        }
+                    }
+                }
+            });
+
+            if (nearestLine) {
+                console.log(`  Focusing nearest line: ${nearestLine}`);
+                const [newFromId, newToId] = nearestLine.split('-');
+                focusLine(newFromId, newToId);
+            } else {
+                console.log(`  No line found below`);
+            }
+        }
+    }
+
+    function moveFocusLeft() {
+        if (!focusedElement) return;
+
+        if (focusedElement.type === 'box') {
+            // Focus the line linking a box with the closest row
+            const current = boxes.get(focusedElement.id);
+            if (!current) return;
+
+            let nearestLine = null;
+            let minRowDistance = Infinity;
+
+            // Check incoming lines (upstream)
+            lines.forEach(({ fromId, toId }, lineKey) => {
+                if (toId === focusedElement.id) {
+                    const fromBox = boxes.get(fromId);
+                    if (!fromBox) return;
+
+                    const rowDistance = Math.abs(fromBox.row - current.row);
+                    if (rowDistance < minRowDistance) {
+                        minRowDistance = rowDistance;
+                        nearestLine = { fromId, toId };
+                    }
+                }
+            });
+
+            if (nearestLine) {
+                // Calculate starting position at left edge of current box
+                const pos = getCellPosition(current.row, current.col);
+                const startPos = { x: pos.x, y: pos.y };
+                focusLine(nearestLine.fromId, nearestLine.toId, startPos);
+            }
+        } else if (focusedElement.type === 'line') {
+            // Navigate to the 'from' box (left/upstream box)
+            const [fromId, toId] = focusedElement.id.split('-');
+
+            // Calculate starting position at line midpoint and animate to right edge
+            const lineKey = focusedElement.id;
+            const { path } = lines.get(lineKey);
+            if (path) {
+                const pathLength = path.getTotalLength();
+                const midPoint = path.getPointAtLength(pathLength / 2);
+                focusBox(fromId, { x: midPoint.x, y: midPoint.y }, 'right');
+            } else {
+                focusBox(fromId);
+            }
+        }
+    }
+
+    function moveFocusRight() {
+        if (!focusedElement) return;
+
+        if (focusedElement.type === 'box') {
+            // Focus the line linking a box with the closest row
+            const current = boxes.get(focusedElement.id);
+            if (!current) return;
+
+            let nearestLine = null;
+            let minRowDistance = Infinity;
+
+            // Check outgoing lines (downstream)
+            lines.forEach(({ fromId, toId }, lineKey) => {
+                if (fromId === focusedElement.id) {
+                    const toBox = boxes.get(toId);
+                    if (!toBox) return;
+
+                    const rowDistance = Math.abs(toBox.row - current.row);
+                    if (rowDistance < minRowDistance) {
+                        minRowDistance = rowDistance;
+                        nearestLine = { fromId, toId };
+                    }
+                }
+            });
+
+            if (nearestLine) {
+                // Calculate starting position at right edge of current box
+                const pos = getCellPosition(current.row, current.col);
+                const rect = current.group.querySelector('rect');
+                const boxWidth = parseFloat(rect.getAttribute('width'));
+                const startPos = { x: pos.x + boxWidth, y: pos.y };
+                focusLine(nearestLine.fromId, nearestLine.toId, startPos);
+            }
+        } else if (focusedElement.type === 'line') {
+            // Navigate to the 'to' box (right/downstream box)
+            const [fromId, toId] = focusedElement.id.split('-');
+
+            // Calculate starting position at line midpoint and animate to left edge
+            const lineKey = focusedElement.id;
+            const { path } = lines.get(lineKey);
+            if (path) {
+                const pathLength = path.getTotalLength();
+                const midPoint = path.getPointAtLength(pathLength / 2);
+                focusBox(toId, { x: midPoint.x, y: midPoint.y }, 'left');
+            } else {
+                focusBox(toId);
+            }
+        }
     }
 
     function commit() {
@@ -573,6 +933,10 @@ function createGrid(svgElement) {
         removeLine,
         focusLine,
         focusBox,
+        moveFocusUp,
+        moveFocusDown,
+        moveFocusLeft,
+        moveFocusRight,
         commit
     };
 }

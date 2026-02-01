@@ -46,10 +46,26 @@
                 if (e.key === 'ArrowUp') {
                     if(menu) {
                         menu.moveUp();
+                    } else {
+                        grid.moveFocusUp();
+                        grid.commit();
                     }
                 } else if (e.key === 'ArrowDown') {
                     if(menu) {
                         menu.moveDown();
+                    } else {
+                        grid.moveFocusDown();
+                        grid.commit();
+                    }
+                } else if (e.key === 'ArrowLeft') {
+                    if(!menu) {
+                        grid.moveFocusLeft();
+                        grid.commit();
+                    }
+                } else if (e.key === 'ArrowRight') {
+                    if(!menu) {
+                        grid.moveFocusRight();
+                        grid.commit();
                     }
                 } else if (e.key === 'Enter') {
                     if(!menu) {
@@ -74,6 +90,23 @@
                             { id: "reverb", label: 'Reverb' },
                             { id: "delay", label: 'Delay' },
                         ]);
+                    } else if(menu.getSelected().id === 'exit') {
+                        grid.setSize(2, 3);
+                        grid.setBox('audio_input', { label: 'IN' }, 0, 0);
+                        grid.setBox('reverb_effect', { label: 'REV' }, 0, 1);
+                        grid.setBox('delay_effect', { label: 'DEL' }, 1, 1);
+                        grid.setBox('audio_output', { label: 'OUT' }, 1, 2);
+                        grid.removeLine('inputs', 'outputs');
+                        grid.removeBox('inputs');
+                        grid.removeBox('outputs');
+                        grid.addLine('audio_input', 'reverb_effect');
+                        grid.addLine('reverb_effect', 'audio_output');
+                        grid.addLine('audio_input', 'delay_effect');
+                        grid.addLine('delay_effect', 'audio_output');
+                        grid.focusBox('delay_effect');
+                        grid.commit();
+                        menu.exit();
+                        menu = null;
                     } else if(menu.getSelected().id === 'audio_in') {
                         grid.setBox('audio_input', { label: 'IN' }, 0, 0);
                         grid.removeLine('inputs', 'outputs');
