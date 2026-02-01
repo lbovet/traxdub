@@ -76,7 +76,7 @@ function showMenu(options) {
             optionStack = document.createElement('div');
             optionStack.id = 'optionStack';
             optionStack.style.position = 'fixed';
-            optionStack.style.left = '20px';
+            optionStack.style.left = '40px';
             optionStack.style.top = '50%';
             optionStack.style.zIndex = 20;
             optionStack.style.display = 'flex';
@@ -93,7 +93,7 @@ function showMenu(options) {
         const rect = selectedDiv.getBoundingClientRect();
         const startX = rect.left;
         const startY = rect.top;
-        const endX = 30 + optionStack.children.length * 10; // px from left
+        const endX = 50 + optionStack.children.length * 10; // px from left
         // Clone for animation
         const animDiv = selectedDiv.cloneNode(true);
         animDiv.style.position = 'fixed';
