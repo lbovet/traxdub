@@ -26,9 +26,9 @@ function showMenu(options) {
     menuDiv.style.zIndex = 10;
     menuDiv.style.opacity = 0;
     if(currentMenu) {
-        menuDiv.style.transition = 'opacity 300ms';
+        menuDiv.style.transition = 'opacity 200ms';
     } else {
-        menuDiv.style.transition = 'opacity 1s';
+        menuDiv.style.transition = 'opacity 300ms';
     }
 
     setTimeout(() => {
@@ -215,7 +215,9 @@ function showMenu(options) {
 
     // Close method - closes current menu and returns to previous
     function _close() {
-        if (menuStack.length === 0) return;
+        if (menuStack.length === 0) {
+            return exit();
+        };
 
         // Get previous menu from stack
         const previousMenu = menuStack.pop();
@@ -268,12 +270,14 @@ function showMenu(options) {
         }
 
         // Remove the option stack if it exists
+        let optionStack = document.getElementById('optionStack');
         if (optionStack && optionStack.parentNode) {
             optionStack.parentNode.removeChild(optionStack);
         }
 
         // Clear current menu reference
         currentMenu = null;
+        return true;
     }
 
     const menu = {

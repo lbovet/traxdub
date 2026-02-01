@@ -17,6 +17,142 @@ function createGrid(svgElement) {
     const boxMinWidth = 50;
     const boxHeight = 26;
 
+    // Color functions
+    function getBoxHighlightColor(box) {
+        if(box.active === false) {
+            return '#067575';
+        } else {
+            return '#66ffff';
+        }
+    }
+
+    function getLineHighlightColor(fromBox, toBox) {
+        if((fromBox.active === false) ||  (toBox.active === false)) {
+            return '#067575';
+        } else {
+            return '#66ffff';
+        }
+    }
+
+    function getBackgroundColor(element) {
+        return '#1a1a1a';
+    }
+
+    function updateBoxStates() {
+        if (!focusedElement) {
+            // No focus - mark all boxes as active
+            boxes.forEach(({ box }) => {
+                box.active = true;
+            });
+            return;
+        }
+
+        // Determine starting box(es) based on focused element
+        let startBoxIds = [];
+        if (focusedElement.type === 'box') {
+            startBoxIds = [focusedElement.id];
+        } else if (focusedElement.type === 'line') {
+            const [fromId, toId] = focusedElement.id.split('-');
+            startBoxIds = [fromId, toId];
+        }
+
+        // Build adjacency lists for upstream and downstream navigation
+        const downstream = new Map(); // boxId -> [connected boxIds]
+        const upstream = new Map();   // boxId -> [connected boxIds]
+
+        boxes.forEach((_, id) => {
+            downstream.set(id, []);
+            upstream.set(id, []);
+        });
+
+        lines.forEach(({ fromId, toId }) => {
+            downstream.get(fromId)?.push(toId);
+            upstream.get(toId)?.push(fromId);
+        });
+
+        // BFS strictly downstream from starting boxes
+        const reachable = new Set(startBoxIds);
+        let downstreamQueue = [...startBoxIds];
+        const downstreamVisited = new Set(startBoxIds);
+
+        while (downstreamQueue.length > 0) {
+            const currentId = downstreamQueue.shift();
+            console.log(`Visiting downstream: ${currentId}`);
+
+            const downstreamBoxes = downstream.get(currentId) || [];
+            for (const nextId of downstreamBoxes) {
+                if (!downstreamVisited.has(nextId)) {
+                    console.log(`  Found downstream: ${nextId}`);
+                    downstreamVisited.add(nextId);
+                    reachable.add(nextId);
+                    downstreamQueue.push(nextId);
+                }
+            }
+        }
+
+        // BFS strictly upstream from starting boxes
+        let upstreamQueue = [...startBoxIds];
+        const upstreamVisited = new Set(startBoxIds);
+
+        while (upstreamQueue.length > 0) {
+            const currentId = upstreamQueue.shift();
+            console.log(`Visiting upstream: ${currentId}`);
+
+            const upstreamBoxes = upstream.get(currentId) || [];
+            for (const nextId of upstreamBoxes) {
+                if (!upstreamVisited.has(nextId)) {
+                    console.log(`  Found upstream: ${nextId}`);
+                    upstreamVisited.add(nextId);
+                    reachable.add(nextId);
+                    upstreamQueue.push(nextId);
+                }
+            }
+        }
+
+        // Update active property for all boxes
+        boxes.forEach(({ box }, id) => {
+            console.log(`Box ${id} active: ${reachable.has(id)}`);
+            box.active = reachable.has(id);
+        });
+    }
+
+    function updateElementColors() {
+        // Update all box colors
+        boxes.forEach(({ box, group }, id) => {
+            const rect = group.querySelector('rect');
+            const text = group.querySelector('text');
+            const color = getBoxHighlightColor(box);
+
+            rect.setAttribute('stroke', color);
+
+            // Check if this box is focused
+            if (focusedElement && focusedElement.type === 'box' && focusedElement.id === id) {
+                // Keep inverted colors for focused box
+                rect.setAttribute('fill', color);
+                text.setAttribute('fill', getBackgroundColor());
+            } else {
+                rect.setAttribute('fill', getBackgroundColor());
+                text.setAttribute('fill', color);
+            }
+        });
+
+        // Update all line colors
+        lines.forEach(({ fromId, toId, path }, key) => {
+            const fromBox = boxes.get(fromId)?.box;
+            const toBox = boxes.get(toId)?.box;
+            path.setAttribute('stroke', getLineHighlightColor(fromBox, toBox));
+        });
+
+        // Update focus circle color if it exists and a line is focused
+        if (focusCircle && focusedElement && focusedElement.type === 'line') {
+            const [fromId, toId] = focusedElement.id.split('-');
+            focusCircle.setAttribute('fill', getLineHighlightColor(
+                boxes.get(fromId)?.box,
+                boxes.get(toId)?.box
+            ));
+        }
+    }
+
     // Create container group for all boxes
     const containerGroup = document.createElementNS(svgNS, 'g');
     containerGroup.setAttribute('id', 'grid-container');
@@ -121,7 +257,7 @@ function createGrid(svgElement) {
             text.setAttribute('y', '1.5');
             text.setAttribute('text-anchor', 'middle');
             text.setAttribute('dominant-baseline', 'middle');
-            text.setAttribute('fill', '#66ffff');
+            text.setAttribute('fill', getBoxHighlightColor(box));
             text.setAttribute('font-size', '20');
             text.setAttribute('opacity', '0'); // Start invisible for animation
             text.textContent = box.label;
@@ -142,9 +278,9 @@ function createGrid(svgElement) {
             rect.setAttribute('y', '0'); // Start at center
             rect.setAttribute('width', boxWidth);
             rect.setAttribute('height', 0); // Start collapsed
-            rect.setAttribute('stroke', '#66ffff');
+            rect.setAttribute('stroke', getBoxHighlightColor(box));
             rect.setAttribute('stroke-width', '1');
-            rect.setAttribute('fill', '#1a1a1a');
+            rect.setAttribute('fill', getBackgroundColor());
             rect.setAttribute('opacity', box.invisible ? '0' : '1'); // Start invisible for animation
             rect.setAttribute('rx', '0.3');
 
@@ -181,10 +317,10 @@ function createGrid(svgElement) {
         rect.setAttribute('height', '0');
         rect.setAttribute('y', '0');
         text.setAttribute('opacity', '0');
+        boxes.delete(id);
 
         setTimeout(() => {
-            boxesGroup.removeChild(group);
-            boxes.delete(id);
+            group.parentNode.removeChild(group);
         }, 250);
     }
 
@@ -272,8 +408,10 @@ function createGrid(svgElement) {
         }
 
         // Create new line
+        const fromBox = boxes.get(fromId)?.box;
+        const toBox = boxes.get(toId)?.box;
         const path = document.createElementNS(svgNS, 'path');
-        path.setAttribute('stroke', '#66ffff');
+        path.setAttribute('stroke', getLineHighlightColor(fromBox, toBox));
         // make round line joins
         path.setAttribute('stroke-linejoin', 'round');
         path.setAttribute('stroke-width', '1');
@@ -292,7 +430,7 @@ function createGrid(svgElement) {
         if (!lines.has(key)) return;
 
         const { path } = lines.get(key);
-        linesGroup.removeChild(path);
+        path.parentNode.removeChild(path);
         lines.delete(key);
     }
 
@@ -306,12 +444,12 @@ function createGrid(svgElement) {
             }
         } else if (focusedElement.type === 'box') {
             // Uninvert the box
-            const { group } = boxes.get(focusedElement.id);
+            const { box, group } = boxes.get(focusedElement.id);
             if (group) {
                 const rect = group.querySelector('rect');
                 const text = group.querySelector('text');
-                rect.setAttribute('fill', '#1a1a1a');
-                text.setAttribute('fill', '#66ffff');
+                rect.setAttribute('fill', getBackgroundColor(box));
+                text.setAttribute('fill', getBoxHighlightColor(box));
                 text.style.fontWeight = 'normal';
             }
         }
@@ -339,8 +477,11 @@ function createGrid(svgElement) {
         if (!focusCircle) {
             focusCircle = document.createElementNS(svgNS, 'circle');
             focusCircle.setAttribute('r', '4');
-            focusCircle.setAttribute('fill', '#66ffff');
-            focusCircle.setAttribute('stroke', '#1a1a1a');
+            focusCircle.setAttribute('fill', getLineHighlightColor(
+                boxes.get(fromId)?.box,
+                boxes.get(toId)?.box
+            ));
+            focusCircle.setAttribute('stroke', getBackgroundColor());
             focusCircle.setAttribute('stroke-width', '1');
             linesGroup.appendChild(focusCircle);
         }
@@ -360,13 +501,10 @@ function createGrid(svgElement) {
         // Unfocus any currently focused element
         unfocus();
 
-        const { group } = boxes.get(id);
-        const rect = group.querySelector('rect');
+        const { box, group } = boxes.get(id);
         const text = group.querySelector('text');
 
-        // Invert colors
-        rect.setAttribute('fill', '#66ffff');
-        text.setAttribute('fill', '#1a1a1a');
+        // Set font weight
         text.style.fontWeight = 'bold';
 
         // Track focused element
@@ -380,6 +518,10 @@ function createGrid(svgElement) {
             containerGroup.style.opacity = '1';
             firstCommit = false;
         }
+
+        // Update box states and colors
+        updateBoxStates();
+        updateElementColors();
 
         if (pendingChanges.size === 0) return;
 
