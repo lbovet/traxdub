@@ -616,9 +616,6 @@ function createGrid(svgElement) {
             const toBox = boxes.get(toId);
             if (!fromBox || !toBox) return;
 
-            console.log(`moveFocusUp from line ${fromId}->${toId}`);
-            console.log(`  Current: fromBox col=${fromBox.col} row=${fromBox.row}, toBox col=${toBox.col} row=${toBox.row}`);
-
             let nearestLine = null;
             let minRowDistance = Infinity;
 
@@ -633,9 +630,6 @@ function createGrid(svgElement) {
                 const sharesStartColumn = lineFrom.col === fromBox.col;
                 const sharesEndColumn = lineTo.col === toBox.col;
 
-                console.log(`  Checking line ${lineFromId}->${lineToId}: from col=${lineFrom.col} row=${lineFrom.row}, to col=${lineTo.col} row=${lineTo.row}`);
-                console.log(`    sharesStartColumn=${sharesStartColumn}, sharesEndColumn=${sharesEndColumn}`);
-
                 if (sharesStartColumn || sharesEndColumn) {
                     let distance = -1;
 
@@ -643,45 +637,36 @@ function createGrid(svgElement) {
                         // Both columns are shared - use maximum distance
                         const startDistance = fromBox.row - lineFrom.row;
                         const endDistance = toBox.row - lineTo.row;
-                        console.log(`    Both columns shared: startDistance=${startDistance}, endDistance=${endDistance}`);
 
                         distance = Math.max(startDistance, endDistance);
-                        console.log(`    Using max distance: ${distance}`);
                     } else if (sharesStartColumn) {
                         const candidateRow = lineFrom.row;
                         const currentRow = fromBox.row;
                         if (candidateRow < currentRow) {
                             distance = currentRow - candidateRow;
                         }
-                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
                     } else {
                         const candidateRow = lineTo.row;
                         const currentRow = toBox.row;
                         if (candidateRow < currentRow) {
                             distance = currentRow - candidateRow;
                         }
-                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
                     }
 
                     if (distance > 0) {
-                        console.log(`    Line is above with distance ${distance}`);
                         if (distance < minRowDistance) {
                             minRowDistance = distance;
                             nearestLine = lineKey;
-                            console.log(`    New nearest line!`);
                         }
                     }
                 }
             });
 
             if (nearestLine) {
-                console.log(`  Focusing nearest line: ${nearestLine}`);
                 // Reset line preference when moving line-to-line
                 lastFocusedLine = null;
                 const [newFromId, newToId] = nearestLine.split('-');
                 focusLine(newFromId, newToId);
-            } else {
-                console.log(`  No line found above`);
             }
         }
     }
@@ -722,9 +707,6 @@ function createGrid(svgElement) {
             const toBox = boxes.get(toId);
             if (!fromBox || !toBox) return;
 
-            console.log(`moveFocusDown from line ${fromId}->${toId}`);
-            console.log(`  Current: fromBox col=${fromBox.col} row=${fromBox.row}, toBox col=${toBox.col} row=${toBox.row}`);
-
             let nearestLine = null;
             let minRowDistance = Infinity;
 
@@ -739,9 +721,6 @@ function createGrid(svgElement) {
                 const sharesStartColumn = lineFrom.col === fromBox.col;
                 const sharesEndColumn = lineTo.col === toBox.col;
 
-                console.log(`  Checking line ${lineFromId}->${lineToId}: from col=${lineFrom.col} row=${lineFrom.row}, to col=${lineTo.col} row=${lineTo.row}`);
-                console.log(`    sharesStartColumn=${sharesStartColumn}, sharesEndColumn=${sharesEndColumn}`);
-
                 if (sharesStartColumn || sharesEndColumn) {
                     let distance = -1;
 
@@ -749,45 +728,36 @@ function createGrid(svgElement) {
                         // Both columns are shared - use maximum distance
                         const startDistance = lineFrom.row - fromBox.row;
                         const endDistance = lineTo.row - toBox.row;
-                        console.log(`    Both columns shared: startDistance=${startDistance}, endDistance=${endDistance}`);
 
                         distance = Math.max(startDistance, endDistance);
-                        console.log(`    Using max distance: ${distance}`);
                     } else if (sharesStartColumn) {
                         const candidateRow = lineFrom.row;
                         const currentRow = fromBox.row;
                         if (candidateRow > currentRow) {
                             distance = candidateRow - currentRow;
                         }
-                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
                     } else {
                         const candidateRow = lineTo.row;
                         const currentRow = toBox.row;
                         if (candidateRow > currentRow) {
                             distance = candidateRow - currentRow;
                         }
-                        console.log(`    candidateRow=${candidateRow}, currentRow=${currentRow}`);
                     }
 
                     if (distance > 0) {
-                        console.log(`    Line is below with distance ${distance}`);
                         if (distance < minRowDistance) {
                             minRowDistance = distance;
                             nearestLine = lineKey;
-                            console.log(`    New nearest line!`);
                         }
                     }
                 }
             });
 
             if (nearestLine) {
-                console.log(`  Focusing nearest line: ${nearestLine}`);
                 // Reset line preference when moving line-to-line
                 lastFocusedLine = null;
                 const [newFromId, newToId] = nearestLine.split('-');
                 focusLine(newFromId, newToId);
-            } else {
-                console.log(`  No line found below`);
             }
         }
     }
