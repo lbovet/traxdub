@@ -31,6 +31,7 @@
     <script src="grid.js"></script>
     <script src="menu.js"></script>
     <script src="rotary.js"></script>
+    <script src="control.js"></script>
     <script src="window.js"></script>
     <script>
         const graphSvg = document.getElementById('main');
@@ -139,9 +140,9 @@
         };
         init(()=>{}, createMenu);
 
-        // Rotary demo in lower right corner
-        const rotaryDemo = createRotary('#00ffff', 0.5);
-        document.getElementById('rotary-demo').appendChild(rotaryDemo.element);
+        // Control demo in lower right corner
+        const controlDemo = createControl('#00ffff', 0.5, 'Gain');
+        document.getElementById('rotary-demo').appendChild(controlDemo.element);
 
         // Oscillate the value with pauses at 0 and 100
         let startTime = Date.now();
@@ -167,7 +168,7 @@
                 value = 1 - t;
             }
 
-            rotaryDemo.setValue(value);
+            controlDemo.setValue(value);
             requestAnimationFrame(animateRotary);
         }
         animateRotary();
