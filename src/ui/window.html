@@ -24,10 +24,13 @@
                 </g>
             </g>
         </svg>
+        <div id="rotary-demo" style="position: absolute; bottom: 50px; right: 20px; padding: 15px; border-radius: 8px;">
+        </div>
     </div>
     <script src="logo.js"></script>
     <script src="grid.js"></script>
     <script src="menu.js"></script>
+    <script src="rotary.js"></script>
     <script src="window.js"></script>
     <script>
         const graphSvg = document.getElementById('main');
@@ -90,28 +93,8 @@
                             { id: "reverb", label: 'Reverb' },
                             { id: "delay", label: 'Delay' },
                         ]);
-                    } else if(menu.getSelected().id === 'exit') {
-                        grid.setSize(2, 3);
-                        grid.setBox('audio_input', { label: 'IN' }, 0, 0);
-                        grid.setBox('reverb_effect', { label: 'REV' }, 0, 1);
-                        grid.setBox('delay_effect', { label: 'DEL' }, 1, 1);
-                        grid.setBox('audio_output', { label: 'OUT' }, 1, 2);
-                        grid.removeLine('inputs', 'outputs');
-                        grid.removeBox('inputs');
-                        grid.removeBox('outputs');
-                        grid.addLine('audio_input', 'reverb_effect');
-                        grid.addLine('reverb_effect', 'audio_output');
-                        grid.addLine('audio_input', 'delay_effect');
-                        grid.addLine('delay_effect', 'audio_output');
-                        grid.focusBox('delay_effect');
-                        grid.commit();
-                        menu.exit();
-                        menu = null;
                     } else if(menu.getSelected().id === 'audio_in') {
                         grid.setBox('audio_input', { label: 'IN' }, 0, 0);
-                        grid.removeLine('inputs', 'outputs');
-                        grid.removeBox('inputs');
-                        grid.addLine('audio_input', 'outputs');
                         grid.focusBox('audio_input');
                         grid.commit();
                         menu.exit();
@@ -121,7 +104,6 @@
                         grid.removeLine('audio_input', 'outputs');
                         grid.removeBox('outputs');
                         grid.addLine('audio_input', 'audio_output');
-                        grid.focusBox('audio_output');
                         grid.commit();
                         menu.exit();
                         menu = null;
@@ -156,6 +138,39 @@
             });
         };
         init(()=>{}, createMenu);
+
+        // Rotary demo in lower right corner
+        const rotaryDemo = createRotary('#00ffff', 0.5);
+        document.getElementById('rotary-demo').appendChild(rotaryDemo.element);
+
+        // Oscillate the value with pauses at 0 and 100
+        let startTime = Date.now();
+        function animateRotary() {
+            const elapsed = Date.now() - startTime;
+            const period = 6000; // 6 seconds total
+            const phase = (elapsed % period) / period; // 0 to 1
+
+            let value;
+            if (phase < 0.167) {
+                // Pause at 0 (0-1s)
+                value = 0;
+            } else if (phase < 0.5) {
+                // Animate from 0 to 1 (1-3s)
+                const t = (phase - 0.167) / (0.5 - 0.167);
+                value = t;
+            } else if (phase < 0.667) {
+                // Pause at 1 (3-4s)
+                value = 1;
+            } else {
+                // Animate from 1 to 0 (4-6s)
+                const t = (phase - 0.667) / (1 - 0.667);
+                value = 1 - t;
+            }
+
+            rotaryDemo.setValue(value);
+            requestAnimationFrame(animateRotary);
+        }
+        animateRotary();
     </script>
 </body>
 </html>
