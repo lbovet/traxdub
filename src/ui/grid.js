@@ -120,6 +120,7 @@ function createGrid(svgElement) {
             if (isActiveLine) {
                 // Move to end of parent (renders on top)
                 linesGroup.appendChild(path);
+                linesGroup.appendChild(focusCircle)
             }
         });
     }
@@ -491,8 +492,8 @@ function createGrid(svgElement) {
             ));
             focusCircle.setAttribute('stroke', getBackgroundColor());
             focusCircle.setAttribute('stroke-width', '1');
-            linesGroup.appendChild(focusCircle);
         }
+        linesGroup.appendChild(focusCircle);
 
         // Clear any pending hide timeout
         if (circleHideTimeout) {
