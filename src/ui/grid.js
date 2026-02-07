@@ -5,7 +5,6 @@ function createGrid(svgElement) {
     let lines = new Map(); // key -> { fromId, toId, path }
     let animatingBoxes = new Map(); // id -> { startPos, endPos, startTime, duration }
     let pendingChanges = new Set(); // Set of box ids with pending position changes
-    let pendingSizeChange = false;
     let firstCommit = true;
     let focusCircle = null; // Circle to indicate focused line
     let focusedElement = null; // { type: 'box'|'line', id: string }
@@ -943,6 +942,10 @@ function createGrid(svgElement) {
             } else {
                 // Clear animation state
                 animatingBoxes.clear();
+                // Set tranform transition of all boxes to null after animation completes
+                boxes.forEach(({ group }) => {
+                    group.style.transition = null;
+                });
             }
         }
 

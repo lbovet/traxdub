@@ -96,6 +96,8 @@
                         ]);
                     } else if(menu.getSelected().id === 'audio_in') {
                         grid.setBox('audio_input', { label: 'IN' }, 0, 0);
+                        grid.removeLine('inputs', 'outputs');
+                        grid.addLine('audio_input', 'outputs');
                         grid.focusBox('audio_input');
                         grid.commit();
                         menu.exit();
@@ -105,6 +107,7 @@
                         grid.removeLine('audio_input', 'outputs');
                         grid.removeBox('outputs');
                         grid.addLine('audio_input', 'audio_output');
+                        grid.focusBox('audio_output');
                         grid.commit();
                         menu.exit();
                         menu = null;
