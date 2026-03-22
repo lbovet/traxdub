@@ -140,8 +140,6 @@ function createRotary(color, value) {
   function setColor(newColor) {
     currentColor = newColor;
     mainArc.setAttribute('stroke', newColor);
-    supportArc.setAttribute('stroke', newColor);
-    ticks.forEach(tick => tick.setAttribute('stroke', newColor));
     valueText.setAttribute('fill', newColor);
     smallCircle.setAttribute('stroke', newColor);
     // Update fill if circle is currently visible and filled
