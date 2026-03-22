@@ -38,13 +38,13 @@ impl PluginFeature {
         let options: Vec<MenuOption> = plugins.iter()
             .map(|plugin| MenuOption {
                 id: plugin.id.clone(),
-                name: plugin.name.clone(),
+                label: plugin.name.clone(),
             })
             .collect();
         
         Menu {
             id: "plugin_selection".to_string(),
-            name: "Select Plugin".to_string(),
+            label: "Select Plugin".to_string(),
             options,
         }
     }

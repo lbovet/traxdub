@@ -528,15 +528,15 @@ impl PersistenceFeature {
     fn get_file_menu(&self) -> Menu {
         Menu {
             id: "file_menu".to_string(),
-            name: "File".to_string(),
+            label: "File".to_string(),
             options: vec![
                 MenuOption {
                     id: "save".to_string(),
-                    name: "Save".to_string(),
+                    label: "Save".to_string(),
                 },
                 MenuOption {
                     id: "load".to_string(),
-                    name: "Load...".to_string(),
+                    label: "Load...".to_string(),
                 },
             ],
         }
@@ -549,13 +549,13 @@ impl PersistenceFeature {
         let options: Vec<MenuOption> = mnemonics.iter()
             .map(|mnemonic| MenuOption {
                 id: mnemonic.clone(),
-                name: Self::format_mnemonic_display(mnemonic),
+                label: Self::format_mnemonic_display(mnemonic),
             })
             .collect();
         
         Menu {
             id: "load_selection".to_string(),
-            name: "Select Session".to_string(),
+            label: "Select Session".to_string(),
             options,
         }
     }
@@ -567,13 +567,13 @@ impl PersistenceFeature {
         let options: Vec<MenuOption> = timestamps.iter()
             .map(|timestamp| MenuOption {
                 id: timestamp.clone(),
-                name: Self::format_timestamp_display(timestamp),
+                label: Self::format_timestamp_display(timestamp),
             })
             .collect();
         
         Menu {
             id: format!("timestamp_selection_{}", mnemonic),
-            name: Self::format_mnemonic_display(mnemonic),
+            label: Self::format_mnemonic_display(mnemonic),
             options,
         }
     }

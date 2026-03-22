@@ -81,15 +81,15 @@ impl SystemFeature {
     fn get_port_type_menu(&self) -> Menu {
         Menu {
             id: format!("{}_port_type", self.direction_name()),
-            name: "Select Port Type".to_string(),
+            label: "Select Port Type".to_string(),
             options: vec![
                 MenuOption {
                     id: "type_audio".to_string(),
-                    name: "Audio".to_string(),
+                    label: "Audio".to_string(),
                 },
                 MenuOption {
                     id: "type_midi".to_string(),
-                    name: "MIDI".to_string(),
+                    label: "MIDI".to_string(),
                 },
             ],
         }
@@ -103,7 +103,7 @@ impl SystemFeature {
                 endpoints.iter().map(|endpoint| {
                     MenuOption {
                         id: format!("{}_{}", self.endpoint_type_name(), endpoint.name),
-                        name: endpoint.name.clone(),
+                        label: endpoint.name.clone(),
                     }
                 }).collect()
             }
@@ -112,7 +112,7 @@ impl SystemFeature {
                 endpoints.iter().map(|endpoint| {
                     MenuOption {
                         id: format!("{}_{}", self.endpoint_type_name(), endpoint.name),
-                        name: endpoint.name.clone(),
+                        label: endpoint.name.clone(),
                     }
                 }).collect()
             }
@@ -123,7 +123,7 @@ impl SystemFeature {
                 SystemDirection::Input => "sources",
                 SystemDirection::Output => "destinations",
             }),
-            name: format!("Select {} {}", self.direction_name_cap(), self.endpoint_type_name_cap()),
+            label: format!("Select {} {}", self.direction_name_cap(), self.endpoint_type_name_cap()),
             options,
         })
     }
@@ -141,7 +141,7 @@ impl SystemFeature {
                 endpoint.ports.iter().map(|port| {
                     MenuOption {
                         id: format!("port_{}", port.name),
-                        name: port.short_name.clone(),
+                        label: port.short_name.clone(),
                     }
                 }).collect()
             }
@@ -155,7 +155,7 @@ impl SystemFeature {
                 endpoint.ports.iter().map(|port| {
                     MenuOption {
                         id: format!("port_{}", port.name),
-                        name: port.short_name.clone(),
+                        label: port.short_name.clone(),
                     }
                 }).collect()
             }
@@ -163,7 +163,7 @@ impl SystemFeature {
 
         Ok(Menu {
             id: format!("{}_ports_{}", self.direction_name(), endpoint_name),
-            name: format!("Ports: {}", endpoint_name),
+            label: format!("Ports: {}", endpoint_name),
             options,
         })
     }
