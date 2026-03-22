@@ -2,7 +2,7 @@
 let menuStack = [];
 let currentMenu = null;
 
-function showMenu(options) {
+function showMenu(options, menuId = 'menu') {
     // If there's already a current menu, stack it first
     if (currentMenu) {
         currentMenu.stackOption();
@@ -57,6 +57,18 @@ function showMenu(options) {
     render();
 
     document.body.appendChild(menuDiv);
+    
+    // Send initial focus
+    function sendMenuFocus() {
+        if (menuOptions && menuOptions[selected]) {
+            sendFocusChanged({
+                type: 'menu',
+                menuId: menuId,
+                optionId: menuOptions[selected].id
+            });
+        }
+    }
+    sendMenuFocus();
 
     // Stack option method
     function stackOption() {
@@ -249,10 +261,12 @@ function showMenu(options) {
             _moveUp: () => {
                 selected = (selected - 1 + menuOptions.length) % menuOptions.length;
                 render();
+                sendMenuFocus();
             },
             _moveDown: () => {
                 selected = (selected + 1) % menuOptions.length;
                 render();
+                sendMenuFocus();
             },
             _getSelected: () => menuOptions[selected],
             _close
@@ -293,10 +307,12 @@ function showMenu(options) {
         _moveUp: () => {
             selected = (selected - 1 + menuOptions.length) % menuOptions.length;
             render();
+            sendMenuFocus();
         },
         _moveDown: () => {
             selected = (selected + 1) % menuOptions.length;
             render();
+            sendMenuFocus();
         },
         _getSelected: () => menuOptions[selected],
         _close,

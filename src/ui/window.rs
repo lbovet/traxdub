@@ -3,6 +3,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
 use tao::event_loop::EventLoopProxy;
 
+use crate::ui::{Element, LinkType};
+
 #[derive(Debug, Clone)]
 pub enum UserEvent {
     Quit,
@@ -23,6 +25,7 @@ pub fn close() -> Result<()> {
 pub fn run(
     message_queue: Arc<Mutex<VecDeque<String>>>,
     menu_stack_size: Arc<Mutex<usize>>,
+    focused_element: Arc<Mutex<Option<Element>>>,
 ) -> Result<()> {
     let running = Arc::new(AtomicBool::new(true));
     let _ = RUNNING.set(Arc::clone(&running));
@@ -73,6 +76,7 @@ pub fn run(
         
         let queue_clone = Arc::clone(&message_queue);
         let menu_size_clone = Arc::clone(&menu_stack_size);
+        let focused_element_clone = Arc::clone(&focused_element);
         
         let builder = WebViewBuilder::new()
             .with_url("app://local/index.html")
@@ -213,6 +217,59 @@ pub fn run(
                                 if let Some(size) = message.get("data").and_then(|d| d.get("size")).and_then(|s| s.as_u64()) {
                                     log::trace!("Menu stack size changed: {}", size);
                                     *menu_size_clone.lock().unwrap() = size as usize;
+                                }
+                            }
+                            "focus_changed" => {
+                                if let Some(data) = message.get("data") {
+                                    // Parse the focused element from JavaScript
+                                    let element = if let Some(element_type) = data.get("type").and_then(|t| t.as_str()) {
+                                        match element_type {
+                                            "node" => {
+                                                if let Some(id) = data.get("id").and_then(|i| i.as_str()) {
+                                                    Some(Element::Node(id.to_string()))
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            "link" => {
+                                                if let (Some(from_id), Some(to_id), Some(link_type_str)) = (
+                                                    data.get("fromId").and_then(|i| i.as_str()),
+                                                    data.get("toId").and_then(|i| i.as_str()),
+                                                    data.get("linkType").and_then(|t| t.as_str()),
+                                                ) {
+                                                    let link_type = match link_type_str {
+                                                        "portIn" => LinkType::PortIn,
+                                                        "portOut" => LinkType::PortOut,
+                                                        "virtual" => LinkType::Virtual,
+                                                        _ => LinkType::Normal,
+                                                    };
+                                                    Some(Element::Link(from_id.to_string(), to_id.to_string(), link_type))
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            "menu" => {
+                                                if let (Some(menu_id), Some(option_id)) = (
+                                                    data.get("menuId").and_then(|i| i.as_str()),
+                                                    data.get("optionId").and_then(|i| i.as_str()),
+                                                ) {
+                                                    Some(Element::MenuOption(menu_id.to_string(), option_id.to_string()))
+                                                } else {
+                                                    None
+                                                }
+                                            }
+                                            "none" => None,
+                                            _ => {
+                                                log::warn!("Unknown element type in focus_changed: {}", element_type);
+                                                None
+                                            }
+                                        }
+                                    } else {
+                                        None
+                                    };
+                                    
+                                    log::trace!("Focus changed: {:?}", element);
+                                    *focused_element_clone.lock().unwrap() = element;
                                 }
                             }
                             "error" => {

@@ -48,6 +48,19 @@ window.addEventListener('resize', updateSize);
 window.addEventListener('DOMContentLoaded', updateSize);
 
 // ============================================================================
+// Focus Tracking
+// ============================================================================
+
+function sendFocusChanged(element) {
+    if (typeof window.ipc === 'undefined') return;
+    
+    window.ipc.postMessage(JSON.stringify({
+        type: 'focus_changed',
+        data: element || { type: 'none' }
+    }));
+}
+
+// ============================================================================
 // Message Polling and Handling
 // ============================================================================
 
@@ -144,7 +157,7 @@ function handleCreateNode(data) {
 function handleCreateLink(data) {
     const { fromId, toId, linkType } = data;
     
-    grid.addLine(fromId, toId);
+    grid.addLine(fromId, toId, linkType || 'normal');
     
     // Focus the first link created
     if (fromId === 'inputs' && toId === 'outputs') {
@@ -217,7 +230,7 @@ function handleCommit() {
 function handleOpenMenu(data) {
     const { id, label, options } = data;
     
-    currentMenu = showMenu(options);
+    currentMenu = showMenu(options, id);
     
     console.log(`Opened menu: ${label} with ${options.length} options`);
 }

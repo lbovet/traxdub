@@ -227,14 +227,14 @@ impl Controller {
                             if from_id == "inputs" {
                                 options.push(crate::ui::MenuOption {
                                     id: "add_input".to_string(),
-                                    label: "Add Input...".to_string(),
+                                    label: "Add Input >".to_string(),
                                 });
                             }
                             
                             if to_id == "outputs" {
                                 options.push(crate::ui::MenuOption {
                                     id: "add_output".to_string(),
-                                    label: "Add Output...".to_string(),
+                                    label: "Add Output >".to_string(),
                                 });
                             }
                             
@@ -242,14 +242,14 @@ impl Controller {
                             if from_id != "inputs" {
                                 options.push(crate::ui::MenuOption {
                                     id: "add_plugin".to_string(),
-                                    label: "Add Plugin...".to_string(),
+                                    label: "Add Plugin >".to_string(),
                                 });
                             }
                             
                             // Add File option (always available)
                             options.push(crate::ui::MenuOption {
                                 id: "file".to_string(),
-                                label: "File...".to_string(),
+                                label: "File >".to_string(),
                             });
                             
                             // Open menu if we have at least one option
@@ -270,7 +270,7 @@ impl Controller {
                                 options: vec![
                                     crate::ui::MenuOption {
                                         id: "file".to_string(),
-                                        label: "File...".to_string(),
+                                        label: "File >".to_string(),
                                     },
                                 ],
                             };

@@ -72,6 +72,7 @@ pub struct UI {
     session_name: Mutex<Option<String>>, // Current session mnemonic
     message_queue: Arc<Mutex<VecDeque<String>>>,
     menu_stack_size: Arc<Mutex<usize>>,
+    focused_element: Arc<Mutex<Option<Element>>>,
 }
 
 impl UI {
@@ -80,11 +81,13 @@ impl UI {
         debug!("Initializing UI with IPC message queue...");
         let message_queue = Arc::new(Mutex::new(VecDeque::new()));
         let menu_stack_size = Arc::new(Mutex::new(0));
+        let focused_element = Arc::new(Mutex::new(None));
         
         Self {
             session_name: Mutex::new(None),
             message_queue,
             menu_stack_size,
+            focused_element,
         }
     }
     
@@ -96,6 +99,11 @@ impl UI {
     /// Get the menu stack size tracker for passing to window::run
     pub fn get_menu_stack_size(&self) -> Arc<Mutex<usize>> {
         Arc::clone(&self.menu_stack_size)
+    }
+    
+    /// Get the focused element tracker for passing to window::run
+    pub fn get_focused_element(&self) -> Arc<Mutex<Option<Element>>> {
+        Arc::clone(&self.focused_element)
     }
 
     /// Send a command to the JavaScript UI
@@ -210,10 +218,10 @@ impl UI {
 
     /// Select the currently focused element
     pub fn select(&self) -> Result<Option<Element>> {
-        // If a menu is open, return the focused menu option
-        // Otherwise, return the focused element        
-        let element = Element::MenuOption("dummy_menu".to_string(), "dummy_option".to_string());
-        Ok(Some(element))
+        // Return the currently focused element tracked by JavaScript
+        let focused = self.focused_element.lock().unwrap().clone();
+        trace!("Selection: {:?}", focused);
+        Ok(focused)
     }
 
     /// Open a menu and push it onto the menu stack

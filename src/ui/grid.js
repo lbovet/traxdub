@@ -2,7 +2,7 @@ function createGrid(svgElement) {
     let rowCount = 1;
     let columnCount = 2;
     let boxes = new Map(); // id -> { box, row, col, group }
-    let lines = new Map(); // key -> { fromId, toId, path }
+    let lines = new Map(); // key -> { fromId, toId, linkType, path }
     let animatingBoxes = new Map(); // id -> { startPos, endPos, startTime, duration }
     let pendingChanges = new Set(); // Set of box ids with pending position changes
     let firstCommit = true;
@@ -400,13 +400,13 @@ function createGrid(svgElement) {
     }
 
     function updateAllLines() {
-        lines.forEach(({ fromId, toId, path }) => {
+        lines.forEach(({ fromId, toId, linkType, path }) => {
             const pathData = calculateLinePath(fromId, toId);
             path.setAttribute('d', pathData);
         });
     }
 
-    function addLine(fromId, toId) {
+    function addLine(fromId, toId, linkType = 'normal') {
         const key = `${fromId}-${toId}`;
 
         // Remove existing line if any
@@ -429,7 +429,7 @@ function createGrid(svgElement) {
         path.setAttribute('d', pathData);
 
         linesGroup.appendChild(path);
-        lines.set(key, { fromId, toId, path });
+        lines.set(key, { fromId, toId, linkType, path });
     }
 
     function removeLine(fromId, toId) {
@@ -463,6 +463,7 @@ function createGrid(svgElement) {
         }
 
         focusedElement = null;
+        sendFocusChanged(null);
     }
 
     function focusLine(fromId, toId, startPos = null) {
@@ -525,6 +526,16 @@ function createGrid(svgElement) {
 
         // Save this as the last focused line for preference
         lastFocusedLine = key;
+        
+        // Send focus change to Rust
+        const { linkType } = lines.get(key) || {};
+        const [fromIdPart, toIdPart] = key.split('-');
+        sendFocusChanged({
+            type: 'link',
+            fromId: fromIdPart,
+            toId: toIdPart,
+            linkType: linkType || 'normal'
+        });
     }
 
     function focusBox(id, startPos = null, edge = null) {
@@ -581,6 +592,7 @@ function createGrid(svgElement) {
 
             // Set focused element immediately
             focusedElement = { type: 'box', id };
+            sendFocusChanged({ type: 'node', id });
             return;
         }
 
@@ -594,6 +606,7 @@ function createGrid(svgElement) {
 
         // Track focused element
         focusedElement = { type: 'box', id };
+        sendFocusChanged({ type: 'node', id });
     }
 
     function moveFocusUp() {
