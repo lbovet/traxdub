@@ -43,21 +43,45 @@ function showMenu(options, menuId = 'menu') {
 
     // Option elements
     let optionDivs = [];
+    
+    function truncateLabel(label) {
+        if (label.length <= 22) return label;
+        
+        // Check if label ends with " >" (space + greater than)
+        const hasTrailingArrow = label.endsWith(' >');
+        const effectiveLabel = hasTrailingArrow ? label.slice(0, -2) : label;
+        
+        // Find last space before character 22
+        const cutPoint = effectiveLabel.lastIndexOf(' ', 21);
+        
+        if (cutPoint > 0) {
+            // Truncate at last space before position 22
+            const truncated = effectiveLabel.substring(0, cutPoint + 1); // Keep trailing space
+            return hasTrailingArrow ? truncated + '>' : truncated;
+        } else {
+            // No space found, just cut at 22
+            const truncated = effectiveLabel.substring(0, 22);
+            return hasTrailingArrow ? truncated + ' >' : truncated;
+        }
+    }
+    
     function render() {
         menuDiv.innerHTML = '';
         const maxVisible = 10;
         const visibleCount = Math.min(maxVisible, menuOptions.length);
         const halfAbove = Math.floor((visibleCount - 1) / 2);
         const halfBelow = Math.floor(visibleCount / 2);
+        console.log(`Rendering menu with ${menuOptions.length} options, showing ${visibleCount} (selected: ${selected})`);
         for (let i = -halfAbove; i <= halfBelow; i++) {
             let idx = (selected + i + menuOptions.length) % menuOptions.length;
             let opt = menuOptions[idx];
             let div = document.createElement('div');
             div.className = 'menu-option';
-            div.textContent = opt.label;
+            div.textContent = truncateLabel(opt.label);
             if (i === 0) div.classList.add('selected');
             menuDiv.appendChild(div);
             optionDivs[i + halfAbove] = div;
+            console.log(`Option ${idx}: ${opt.label} ${i === 0 ? '(selected)' : ''}`);
         }
     }
     render();

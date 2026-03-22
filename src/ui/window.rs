@@ -45,7 +45,7 @@ pub fn run(
     let window = WindowBuilder::new()
         .with_title("TraxDub")
         .with_background_color((0x1a, 0x1a, 0x1a, 0xff).into())
-        .with_inner_size(LogicalSize::new(800.0, 600.0))
+        .with_inner_size(LogicalSize::new(920.0, 640.0))
         .build(&event_loop)?;
 
     let window_html = include_str!("window.html").to_string();
