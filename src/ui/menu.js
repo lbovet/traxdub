@@ -85,7 +85,8 @@ function showMenu(options, menuId = 'menu') {
         menuStack.push({
             options: menuOptions,
             selected: selected,
-            menuDiv: menuDiv
+            menuDiv: menuDiv,
+            menuId: menuId
         });
 
         // Create or get the optionStack div
@@ -250,6 +251,7 @@ function showMenu(options, menuId = 'menu') {
         menuOptions = previousMenu.options;
         selected = previousMenu.selected;
         menuDiv = previousMenu.menuDiv;
+        menuId = previousMenu.menuId;
 
         // Re-render with restored state
         render();
@@ -261,6 +263,7 @@ function showMenu(options, menuId = 'menu') {
             moveDown: () => currentMenu && currentMenu._moveDown(),
             getSelected: () => currentMenu && currentMenu._getSelected(),
             close: () => currentMenu && currentMenu._close(),
+            exit: () => currentMenu && currentMenu._exit(),
             stackOption,
             unstackOption,
             menuDiv,
@@ -275,8 +278,12 @@ function showMenu(options, menuId = 'menu') {
                 sendMenuFocus();
             },
             _getSelected: () => menuOptions[selected],
-            _close
+            _close,
+            _exit: exit
         };
+        
+        // Send focus update for the restored menu
+        sendMenuFocus();
         
         // Return true to indicate there was a parent menu (don't clear currentMenu)
         return true;

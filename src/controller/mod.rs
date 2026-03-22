@@ -389,12 +389,11 @@ impl Controller {
                             self.current_feature = None;
                             self.state = ControllerState::Navigating;
                         }
-                    } else {
+
                         let current_elem = self.current_element.clone();
                         if let Some(feature) = self.current_feature_mut() {
                             feature.handle_menu_option(None, current_elem.as_ref())?;
-                        }
-                        self.current_element = None;
+                        }                        
                     }
                 }
             }

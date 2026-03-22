@@ -78,8 +78,7 @@ async function pollMessages() {
         const response = await fetch('/messages');
         const messages = await response.json();
         
-        if (messages.length > 0) {
-            console.log(`Processing ${messages.length} messages`);
+        if (messages.length > 0) {        
             
             // Process all messages
             for (const msgStr of messages) {
@@ -101,7 +100,9 @@ async function pollMessages() {
 }
 
 function handleMessage(message) {
-    console.log('Received message:', message);
+    if(!message.type.startsWith('navigate_')) {
+        console.log('Received message:', message);
+    }
     try {
         const { type, data } = message;
         
@@ -182,18 +183,19 @@ function handleCreateLink(data) {
 function handleInsertNode(data) {
     const { id, label, nodeType, linkFrom, linkTo } = data;
     
-    // Remove old link (unless it's inputs to outputs)
-    if (linkFrom !== 'inputs' || linkTo !== 'outputs') {
-        grid.removeLine(linkFrom, linkTo);
-    }
+    grid.removeLine(linkFrom, linkTo);
     
     // Create new node
     const boxOptions = { label };
-    grid.setBox(id, boxOptions);
+    grid.setBox(id, boxOptions, 0, linkFrom === 'inputs' ? 0 : 1);
     
     // Create new links
-    grid.addLine(linkFrom, id);
-    grid.addLine(id, linkTo);
+    if(nodeType !== 'portIn') {
+        grid.addLine(linkFrom, id);
+    }
+    if(nodeType !== 'portOut') {
+        grid.addLine(id, linkTo);
+    }
     
     // Focus the new node
     grid.focusBox(id);
@@ -217,6 +219,7 @@ function handleNavigateGrid(data) {
             grid.moveFocusUp();
         }
     }
+    grid.commit();
 }
 
 function handleNavigateMenu(data) {

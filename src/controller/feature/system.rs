@@ -189,7 +189,7 @@ impl Feature for SystemFeature {
     }
 
     fn handle_menu_option(&mut self, option_id: Option<&str>, element: Option<&crate::ui::Element>) -> Result<ControllerState> {
-        debug!("{} feature handle_menu_option called with element: {:?}", self.direction_name_cap(), element);
+        debug!("{} feature option {} called with element: {:?}", self.direction_name_cap(), option_id.unwrap_or("None"), element);
         
         // Handle menu closure - revert to previous menu state
         let Some(option_id) = option_id else {
