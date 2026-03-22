@@ -51,12 +51,21 @@ window.addEventListener('DOMContentLoaded', updateSize);
 // Focus Tracking
 // ============================================================================
 
-function sendFocusChanged(element) {
+function sendGridFocusChanged(element) {
     if (typeof window.ipc === 'undefined') return;
     
     window.ipc.postMessage(JSON.stringify({
         type: 'focus_changed',
-        data: element || { type: 'none' }
+        data: element || { type: 'grid_none' }
+    }));
+}
+
+function sendMenuFocusChanged(element) {
+    if (typeof window.ipc === 'undefined') return;
+    
+    window.ipc.postMessage(JSON.stringify({
+        type: 'focus_changed',
+        data: element || { type: 'menu_none' }
     }));
 }
 
@@ -106,8 +115,11 @@ function handleMessage(message) {
             case 'insert_node':
                 handleInsertNode(data);
                 break;
-            case 'navigate':
-                handleNavigate(data);
+            case 'navigate_grid':
+                handleNavigateGrid(data);
+                break;
+            case 'navigate_menu':
+                handleNavigateMenu(data);
                 break;
             case 'open_menu':
                 handleOpenMenu(data);
@@ -189,20 +201,9 @@ function handleInsertNode(data) {
     console.log(`Inserted node: ${id} between ${linkFrom} and ${linkTo}`);
 }
 
-function handleNavigate(data) {
+function handleNavigateGrid(data) {
     const { level, direction } = data;
     
-    // If menu is open, navigate the menu
-    if (currentMenu !== null) {
-        if (direction === 'forward') {
-            currentMenu.moveDown();
-        } else if (direction === 'backward') {
-            currentMenu.moveUp();
-        }
-        return;
-    }
-    
-    // Otherwise navigate the grid
     if (level === 'main') {
         if (direction === 'forward') {
             grid.moveFocusRight();
@@ -215,6 +216,18 @@ function handleNavigate(data) {
         } else if (direction === 'backward') {
             grid.moveFocusUp();
         }
+    }
+}
+
+function handleNavigateMenu(data) {
+    const { direction } = data;
+    
+    if (!currentMenu) return;
+    
+    if (direction === 'forward') {
+        currentMenu.moveDown();
+    } else if (direction === 'backward') {
+        currentMenu.moveUp();
     }
 }
 

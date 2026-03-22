@@ -203,79 +203,84 @@ impl Controller {
                 // Check if it's the main knob
                 if config.main_knob.channel == channel && config.main_knob.control == control {
                     if let Some(direction) = Self::process_knob_value(value, &mut self.main_knob_accumulator, DELTA_THRESHOLD) {
-                        self.ui.navigate(NavigationLevel::Main, direction)?;
+                        self.ui.navigate_grid(NavigationLevel::Main, direction)?;
                     }
                 }
                 // Check if it's the secondary knob
                 else if config.secondary_knob.channel == channel && config.secondary_knob.control == control {
                     if let Some(direction) = Self::process_knob_value(value, &mut self.secondary_knob_accumulator, DELTA_THRESHOLD) {
-                        self.ui.navigate(NavigationLevel::Secondary, direction)?;
+                        self.ui.navigate_grid(NavigationLevel::Secondary, direction)?;
                     }
                 }
                 // Check if it's the selection button (button press: value > 0)
                 else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
-                    if let Some(element) = self.ui.select()? {
-                        debug!("Selected element: {:?}", element);
+                    if let Some(element) = self.ui.select_grid()? {
+                        debug!("Selected grid element: {:?}", element);
                         
-                        // Store the selected element for use by features
-                        self.current_element = Some(element.clone());
-                                               
-                        if let crate::ui::Element::Link(ref from_id, ref to_id, _) = element {
-                            // Build menu options based on link endpoints
-                            let mut options = Vec::new();
-                            
-                            if from_id == "inputs" {
+                        match element {
+                            crate::ui::GridElement::Link(ref from_id, ref to_id, _) => {
+                                // Store as Element for backwards compatibility
+                                self.current_element = Some(crate::ui::Element::Link(from_id.clone(), to_id.clone(), crate::ui::LinkType::Normal));
+                                
+                                // Build menu options based on link endpoints
+                                let mut options = Vec::new();
+                                
+                                if from_id == "inputs" {
+                                    options.push(crate::ui::MenuOption {
+                                        id: "add_input".to_string(),
+                                        label: "Add Input >".to_string(),
+                                    });
+                                }
+                                
+                                if to_id == "outputs" {
+                                    options.push(crate::ui::MenuOption {
+                                        id: "add_output".to_string(),
+                                        label: "Add Output >".to_string(),
+                                    });
+                                }
+                                
+                                // Add plugin option if upstream is not "inputs"
+                                if from_id != "inputs" {
+                                    options.push(crate::ui::MenuOption {
+                                        id: "add_plugin".to_string(),
+                                        label: "Add Plugin >".to_string(),
+                                    });
+                                }
+                                
+                                // Add File option (always available)
                                 options.push(crate::ui::MenuOption {
-                                    id: "add_input".to_string(),
-                                    label: "Add Input >".to_string(),
+                                    id: "file".to_string(),
+                                    label: "File >".to_string(),
                                 });
+                                
+                                // Open menu if we have at least one option
+                                if !options.is_empty() {
+                                    let menu = crate::ui::Menu {
+                                        id: format!("link_{}_{}", from_id, to_id),
+                                        label: format!("{} → {}", from_id, to_id),
+                                        options,
+                                    };
+                                    self.ui.open_menu(menu)?;
+                                    self.state = ControllerState::BrowsingMenu;
+                                }
                             }
-                            
-                            if to_id == "outputs" {
-                                options.push(crate::ui::MenuOption {
-                                    id: "add_output".to_string(),
-                                    label: "Add Output >".to_string(),
-                                });
-                            }
-                            
-                            // Add plugin option if upstream is not "inputs"
-                            if from_id != "inputs" {
-                                options.push(crate::ui::MenuOption {
-                                    id: "add_plugin".to_string(),
-                                    label: "Add Plugin >".to_string(),
-                                });
-                            }
-                            
-                            // Add File option (always available)
-                            options.push(crate::ui::MenuOption {
-                                id: "file".to_string(),
-                                label: "File >".to_string(),
-                            });
-                            
-                            // Open menu if we have at least one option
-                            if !options.is_empty() {
+                            crate::ui::GridElement::Node(ref node_id) => {
+                                // Store as Element for backwards compatibility \n                                self.current_element = Some(crate::ui::Element::Node(node_id.clone()));
+                                
+                                // For node elements, only show File menu
                                 let menu = crate::ui::Menu {
-                                    id: format!("link_{}_{}", from_id, to_id),
-                                    label: format!("{} → {}", from_id, to_id),
-                                    options,
+                                    id: "node_menu".to_string(),
+                                    label: "Node".to_string(),
+                                    options: vec![
+                                        crate::ui::MenuOption {
+                                            id: "file".to_string(),
+                                            label: "File >".to_string(),
+                                        },
+                                    ],
                                 };
                                 self.ui.open_menu(menu)?;
                                 self.state = ControllerState::BrowsingMenu;
                             }
-                        } else {
-                            // For node elements, only show File menu
-                            let menu = crate::ui::Menu {
-                                id: "node_menu".to_string(),
-                                label: "Node".to_string(),
-                                options: vec![
-                                    crate::ui::MenuOption {
-                                        id: "file".to_string(),
-                                        label: "File >".to_string(),
-                                    },
-                                ],
-                            };
-                            self.ui.open_menu(menu)?;
-                            self.state = ControllerState::BrowsingMenu;
                         }
                     }
                 }
@@ -300,78 +305,78 @@ impl Controller {
                 // Check if it's the main knob (navigate menu options)
                 if config.main_knob.channel == channel && config.main_knob.control == control {
                     if let Some(direction) = Self::process_knob_value(value, &mut self.main_knob_accumulator, DELTA_THRESHOLD) {
-                        self.ui.navigate(NavigationLevel::Main, direction)?;
+                        self.ui.navigate_menu(direction)?;
                     }
                 }
                 // Secondary knob is not used in menu browsing
                 // Check if it's the selection button (select menu option)
                 else if config.selection_button.channel == channel && config.selection_button.control == control && value > 0 {
-                    if let Some(element) = self.ui.select()? {
-                        debug!("Selected element in menu: {:?}", element);
+                    if let Some(menu_option) = self.ui.select_menu()? {
+                        debug!("Selected menu option: {:?}", menu_option);
                         
-                        if let crate::ui::Element::MenuOption(_, ref option_id) = element {
-                            // Handle special link menu options
-                            if option_id == "add_input" {
-                                self.current_feature = self.input_feature.as_mut().map(|f| f as *mut dyn Feature);
-                                // Open the input feature menu on top of the link menu
-                                if let Some(feature) = self.current_feature() {
-                                    let menu = feature.get_menu();
-                                    self.ui.open_menu(menu)?;
-                                }
-                                return Ok(());
-                            } else if option_id == "add_output" {
-                                self.current_feature = self.output_feature.as_mut().map(|f| f as *mut dyn Feature);
-                                // Open the output feature menu on top of the link menu
-                                if let Some(feature) = self.current_feature() {
-                                    let menu = feature.get_menu();
-                                    self.ui.open_menu(menu)?;
-                                }
-                                return Ok(());
-                            } else if option_id == "add_plugin" {
-                                self.current_feature = self.plugin_feature.as_mut().map(|f| f as *mut dyn Feature);
-                                // Open the plugin feature menu on top of the link menu
-                                if let Some(feature) = self.current_feature() {
-                                    let menu = feature.get_menu();
-                                    self.ui.open_menu(menu)?;
-                                }
-                                return Ok(());
-                            } else if option_id == "file" {
-                                self.current_feature = self.persistence_feature.as_mut().map(|f| f as *mut dyn Feature);
-                                // Open the file feature menu on top of the current menu
-                                if let Some(feature) = self.current_feature() {
-                                    let menu = feature.get_menu();
-                                    self.ui.open_menu(menu)?;
-                                }
-                                return Ok(());
+                        let option_id = &menu_option.option_id;
+                        
+                        // Handle special link menu options
+                        if option_id == "add_input" {
+                            self.current_feature = self.input_feature.as_mut().map(|f| f as *mut dyn Feature);
+                            // Open the input feature menu on top of the link menu
+                            if let Some(feature) = self.current_feature() {
+                                let menu = feature.get_menu();
+                                self.ui.open_menu(menu)?;
                             }
-                            
-                            // Handle menu option through the current active feature
-                            let current_elem = self.current_element.clone();
-                            let next_state = if let Some(feature) = self.current_feature_mut() {
-                                feature.handle_menu_option(Some(option_id), current_elem.as_ref())?
-                            } else {
-                                ControllerState::Navigating
-                            };
-                            
-                            match next_state {
-                                ControllerState::BrowsingMenu => {
-                                    // Open the next menu from the current feature
-                                    if let Some(feature) = self.current_feature() {
-                                        let menu = feature.get_menu();
-                                        self.ui.open_menu(menu)?;
-                                    }
+                            return Ok(());
+                        } else if option_id == "add_output" {
+                            self.current_feature = self.output_feature.as_mut().map(|f| f as *mut dyn Feature);
+                            // Open the output feature menu on top of the link menu
+                            if let Some(feature) = self.current_feature() {
+                                let menu = feature.get_menu();
+                                self.ui.open_menu(menu)?;
+                            }
+                            return Ok(());
+                        } else if option_id == "add_plugin" {
+                            self.current_feature = self.plugin_feature.as_mut().map(|f| f as *mut dyn Feature);
+                            // Open the plugin feature menu on top of the link menu
+                            if let Some(feature) = self.current_feature() {
+                                let menu = feature.get_menu();
+                                self.ui.open_menu(menu)?;
+                            }
+                            return Ok(());
+                        } else if option_id == "file" {
+                            self.current_feature = self.persistence_feature.as_mut().map(|f| f as *mut dyn Feature);
+                            // Open the file feature menu on top of the current menu
+                            if let Some(feature) = self.current_feature() {
+                                let menu = feature.get_menu();
+                                self.ui.open_menu(menu)?;
+                            }
+                            return Ok(());
+                        }
+                        
+                        // Handle menu option through the current active feature
+                        let current_elem = self.current_element.clone();
+                        let next_state = if let Some(feature) = self.current_feature_mut() {
+                            feature.handle_menu_option(Some(option_id), current_elem.as_ref())?
+                        } else {
+                            ControllerState::Navigating
+                        };
+                        
+                        match next_state {
+                            ControllerState::BrowsingMenu => {
+                                // Open the next menu from the current feature
+                                if let Some(feature) = self.current_feature() {
+                                    let menu = feature.get_menu();
+                                    self.ui.open_menu(menu)?;
                                 }
-                                ControllerState::Navigating => {
-                                    // Close all menus and return to navigating
-                                    self.ui.close_all_menus()?;
-                                    self.current_feature = None;
-                                    self.current_element = None;
-                                    self.state = ControllerState::Navigating;
-                                }
-                                _ => {
-                                    // For other states, just transition
-                                    self.state = next_state;
-                                }
+                            }
+                            ControllerState::Navigating => {
+                                // Close all menus and return to navigating
+                                self.ui.close_all_menus()?;
+                                self.current_feature = None;
+                                self.current_element = None;
+                                self.state = ControllerState::Navigating;
+                            }
+                            _ => {
+                                // For other states, just transition
+                                self.state = next_state;
                             }
                         }
                     }
@@ -380,8 +385,10 @@ impl Controller {
                 else if config.back_button.channel == channel && config.back_button.control == control && value > 0 {
                     if self.ui.back()? {
                         // If no more menus, return to Navigating
-                        self.current_feature = None;
-                        self.state = ControllerState::Navigating;
+                        if !self.ui.is_menu_open() {
+                            self.current_feature = None;
+                            self.state = ControllerState::Navigating;
+                        }
                     } else {
                         let current_elem = self.current_element.clone();
                         if let Some(feature) = self.current_feature_mut() {

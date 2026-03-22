@@ -3,7 +3,7 @@ use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
 use tao::event_loop::EventLoopProxy;
 
-use crate::ui::{Element, LinkType};
+use crate::ui::{GridElement, MenuOptionElement, LinkType};
 
 #[derive(Debug, Clone)]
 pub enum UserEvent {
@@ -25,7 +25,8 @@ pub fn close() -> Result<()> {
 pub fn run(
     message_queue: Arc<Mutex<VecDeque<String>>>,
     menu_stack_size: Arc<Mutex<usize>>,
-    focused_element: Arc<Mutex<Option<Element>>>,
+    focused_grid_element: Arc<Mutex<Option<GridElement>>>,
+    focused_menu_option: Arc<Mutex<Option<MenuOptionElement>>>,
 ) -> Result<()> {
     let running = Arc::new(AtomicBool::new(true));
     let _ = RUNNING.set(Arc::clone(&running));
@@ -76,7 +77,8 @@ pub fn run(
         
         let queue_clone = Arc::clone(&message_queue);
         let menu_size_clone = Arc::clone(&menu_stack_size);
-        let focused_element_clone = Arc::clone(&focused_element);
+        let focused_grid_clone = Arc::clone(&focused_grid_element);
+        let focused_menu_clone = Arc::clone(&focused_menu_option);
         
         let builder = WebViewBuilder::new()
             .with_url("app://local/index.html")
@@ -221,17 +223,16 @@ pub fn run(
                             }
                             "focus_changed" => {
                                 if let Some(data) = message.get("data") {
-                                    // Parse the focused element from JavaScript
-                                    let element = if let Some(element_type) = data.get("type").and_then(|t| t.as_str()) {
+                                    if let Some(element_type) = data.get("type").and_then(|t| t.as_str()) {
                                         match element_type {
-                                            "node" => {
+                                            "grid_node" => {
                                                 if let Some(id) = data.get("id").and_then(|i| i.as_str()) {
-                                                    Some(Element::Node(id.to_string()))
-                                                } else {
-                                                    None
+                                                    let element = GridElement::Node(id.to_string());
+                                                    log::trace!("Grid focus changed: {:?}", element);
+                                                    *focused_grid_clone.lock().unwrap() = Some(element);
                                                 }
                                             }
-                                            "link" => {
+                                            "grid_link" => {
                                                 if let (Some(from_id), Some(to_id), Some(link_type_str)) = (
                                                     data.get("fromId").and_then(|i| i.as_str()),
                                                     data.get("toId").and_then(|i| i.as_str()),
@@ -243,33 +244,37 @@ pub fn run(
                                                         "virtual" => LinkType::Virtual,
                                                         _ => LinkType::Normal,
                                                     };
-                                                    Some(Element::Link(from_id.to_string(), to_id.to_string(), link_type))
-                                                } else {
-                                                    None
+                                                    let element = GridElement::Link(from_id.to_string(), to_id.to_string(), link_type);
+                                                    log::trace!("Grid focus changed: {:?}", element);
+                                                    *focused_grid_clone.lock().unwrap() = Some(element);
                                                 }
+                                            }
+                                            "grid_none" => {
+                                                log::trace!("Grid focus cleared");
+                                                *focused_grid_clone.lock().unwrap() = None;
                                             }
                                             "menu" => {
                                                 if let (Some(menu_id), Some(option_id)) = (
                                                     data.get("menuId").and_then(|i| i.as_str()),
                                                     data.get("optionId").and_then(|i| i.as_str()),
                                                 ) {
-                                                    Some(Element::MenuOption(menu_id.to_string(), option_id.to_string()))
-                                                } else {
-                                                    None
+                                                    let element = MenuOptionElement {
+                                                        menu_id: menu_id.to_string(),
+                                                        option_id: option_id.to_string(),
+                                                    };
+                                                    log::trace!("Menu focus changed: {:?}", element);
+                                                    *focused_menu_clone.lock().unwrap() = Some(element);
                                                 }
                                             }
-                                            "none" => None,
+                                            "menu_none" => {
+                                                log::trace!("Menu focus cleared");
+                                                *focused_menu_clone.lock().unwrap() = None;
+                                            }
                                             _ => {
                                                 log::warn!("Unknown element type in focus_changed: {}", element_type);
-                                                None
                                             }
                                         }
-                                    } else {
-                                        None
-                                    };
-                                    
-                                    log::trace!("Focus changed: {:?}", element);
-                                    *focused_element_clone.lock().unwrap() = element;
+                                    }
                                 }
                             }
                             "error" => {

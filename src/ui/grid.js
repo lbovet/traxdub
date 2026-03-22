@@ -463,7 +463,7 @@ function createGrid(svgElement) {
         }
 
         focusedElement = null;
-        sendFocusChanged(null);
+        sendGridFocusChanged(null);
     }
 
     function focusLine(fromId, toId, startPos = null) {
@@ -530,8 +530,8 @@ function createGrid(svgElement) {
         // Send focus change to Rust
         const { linkType } = lines.get(key) || {};
         const [fromIdPart, toIdPart] = key.split('-');
-        sendFocusChanged({
-            type: 'link',
+        sendGridFocusChanged({
+            type: 'grid_link',
             fromId: fromIdPart,
             toId: toIdPart,
             linkType: linkType || 'normal'
@@ -592,7 +592,7 @@ function createGrid(svgElement) {
 
             // Set focused element immediately
             focusedElement = { type: 'box', id };
-            sendFocusChanged({ type: 'node', id });
+            sendGridFocusChanged({ type: 'grid_node', id });
             return;
         }
 
@@ -606,7 +606,7 @@ function createGrid(svgElement) {
 
         // Track focused element
         focusedElement = { type: 'box', id };
-        sendFocusChanged({ type: 'node', id });
+        sendGridFocusChanged({ type: 'grid_node', id });
     }
 
     function moveFocusUp() {

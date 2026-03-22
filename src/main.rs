@@ -65,7 +65,8 @@ fn main() -> Result<()> {
         let ui_result = ui::window::run(
             ui.get_message_queue(),
             ui.get_menu_stack_size(),
-            ui.get_focused_element(),
+            ui.get_focused_grid_element(),
+            ui.get_focused_menu_option(),
         );
 
         // Return the first error if any occurred

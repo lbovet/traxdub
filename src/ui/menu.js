@@ -67,7 +67,7 @@ function showMenu(options, menuId = 'menu') {
     // Send initial focus
     function sendMenuFocus() {
         if (menuOptions && menuOptions[selected]) {
-            sendFocusChanged({
+            sendMenuFocusChanged({
                 type: 'menu',
                 menuId: menuId,
                 optionId: menuOptions[selected].id
@@ -297,6 +297,9 @@ function showMenu(options, menuId = 'menu') {
 
         // Clear current menu reference
         currentMenu = null;
+        
+        // Clear menu focus
+        sendMenuFocusChanged(null);
         
         // Restore grid focus if we saved one
         if (savedGridFocus && typeof grid !== 'undefined' && grid) {

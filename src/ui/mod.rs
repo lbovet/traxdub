@@ -23,12 +23,26 @@ pub struct Menu {
     pub options: Vec<MenuOption>,
 }
 
-/// Focused element type
+/// Grid element type (node or link)
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GridElement {
+    Node(String),
+    Link(String, String, LinkType), // (from_id, to_id, link_type)
+}
+
+/// Menu option element
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MenuOptionElement {
+    pub menu_id: String,
+    pub option_id: String,
+}
+
+/// Legacy: Focused element type (for backwards compatibility)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Element {
     Node(String),
-    Link(String, String, LinkType), // (from_id, to_id, link_type)
-    MenuOption(String, String), // (menu_id, option_id)
+    Link(String, String, LinkType),
+    MenuOption(String, String),
 }
 
 /// Node type
@@ -71,7 +85,8 @@ pub struct UI {
     session_name: Mutex<Option<String>>, // Current session mnemonic
     message_queue: Arc<Mutex<VecDeque<String>>>,
     menu_stack_size: Arc<Mutex<usize>>,
-    focused_element: Arc<Mutex<Option<Element>>>,
+    focused_grid_element: Arc<Mutex<Option<GridElement>>>,
+    focused_menu_option: Arc<Mutex<Option<MenuOptionElement>>>,
 }
 
 impl UI {
@@ -80,13 +95,15 @@ impl UI {
         debug!("Initializing UI with IPC message queue...");
         let message_queue = Arc::new(Mutex::new(VecDeque::new()));
         let menu_stack_size = Arc::new(Mutex::new(0));
-        let focused_element = Arc::new(Mutex::new(None));
+        let focused_grid_element = Arc::new(Mutex::new(None));
+        let focused_menu_option = Arc::new(Mutex::new(None));
         
         Self {
             session_name: Mutex::new(None),
             message_queue,
             menu_stack_size,
-            focused_element,
+            focused_grid_element,
+            focused_menu_option,
         }
     }
     
@@ -100,9 +117,14 @@ impl UI {
         Arc::clone(&self.menu_stack_size)
     }
     
-    /// Get the focused element tracker for passing to window::run
-    pub fn get_focused_element(&self) -> Arc<Mutex<Option<Element>>> {
-        Arc::clone(&self.focused_element)
+    /// Get the focused grid element tracker for passing to window::run
+    pub fn get_focused_grid_element(&self) -> Arc<Mutex<Option<GridElement>>> {
+        Arc::clone(&self.focused_grid_element)
+    }
+    
+    /// Get the focused menu option tracker for passing to window::run
+    pub fn get_focused_menu_option(&self) -> Arc<Mutex<Option<MenuOptionElement>>> {
+        Arc::clone(&self.focused_menu_option)
     }
 
     /// Send a command to the JavaScript UI
@@ -194,9 +216,9 @@ impl UI {
         }))
     }
 
-    /// Handle navigation event
-    pub fn navigate(&self, level: NavigationLevel, direction: KnobDirection) -> Result<()> {
-        trace!("Navigate: {:?} {:?}", level, direction);
+    /// Navigate in the grid
+    pub fn navigate_grid(&self, level: NavigationLevel, direction: KnobDirection) -> Result<()> {
+        trace!("Navigate grid: {:?} {:?}", level, direction);
         
         let level_str = match level {
             NavigationLevel::Main => "main",
@@ -208,19 +230,43 @@ impl UI {
             KnobDirection::Backward => "backward",
         };
         
-        self.send_command("navigate", json!({
+        self.send_command("navigate_grid", json!({
             "level": level_str,
             "direction": direction_str
         }))
     }
+    
+    /// Navigate in the menu (only one direction: up/down)
+    pub fn navigate_menu(&self, direction: KnobDirection) -> Result<()> {
+        trace!("Navigate menu: {:?}", direction);
+        
+        let direction_str = match direction {
+            KnobDirection::Forward => "forward",
+            KnobDirection::Backward => "backward",
+        };
+        
+        self.send_command("navigate_menu", json!({
+            "direction": direction_str
+        }))
+    }
 
-
-    /// Select the currently focused element
-    pub fn select(&self) -> Result<Option<Element>> {
-        // Return the currently focused element tracked by JavaScript
-        let focused = self.focused_element.lock().unwrap().clone();
-        trace!("Selection: {:?}", focused);
+    /// Select the currently focused grid element (node or link)
+    pub fn select_grid(&self) -> Result<Option<GridElement>> {
+        let focused = self.focused_grid_element.lock().unwrap().clone();
+        trace!("Grid selection: {:?}", focused);
         Ok(focused)
+    }
+    
+    /// Select the currently focused menu option
+    pub fn select_menu(&self) -> Result<Option<MenuOptionElement>> {
+        let focused = self.focused_menu_option.lock().unwrap().clone();
+        trace!("Menu selection: {:?}", focused);
+        Ok(focused)
+    }
+    
+    /// Check if a menu is currently open
+    pub fn is_menu_open(&self) -> bool {
+        *self.menu_stack_size.lock().unwrap() > 0
     }
 
     /// Open a menu and push it onto the menu stack
