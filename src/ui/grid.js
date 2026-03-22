@@ -965,6 +965,10 @@ function createGrid(svgElement) {
         requestAnimationFrame(animateLines);
     }
 
+    function getFocusedElement() {
+        return focusedElement;
+    }
+
     return {
         setSize,
         setBox,
@@ -977,6 +981,7 @@ function createGrid(svgElement) {
         moveFocusDown,
         moveFocusLeft,
         moveFocusRight,
-        commit
+        commit,
+        getFocusedElement
     };
 }

@@ -67,7 +67,6 @@ pub struct Link {
     pub link_type: LinkType,
 }
 
-/// UI module - Phase 1: Console-based interface
 pub struct UI {
     session_name: Mutex<Option<String>>, // Current session mnemonic
     message_queue: Arc<Mutex<VecDeque<String>>>,

@@ -380,10 +380,8 @@ impl Controller {
                 else if config.back_button.channel == channel && config.back_button.control == control && value > 0 {
                     if self.ui.back()? {
                         // If no more menus, return to Navigating
-                        if self.ui.menu_stack_size() == 0 {
-                            self.current_feature = None;
-                            self.state = ControllerState::Navigating;
-                        }
+                        self.current_feature = None;
+                        self.state = ControllerState::Navigating;
                     } else {
                         let current_elem = self.current_element.clone();
                         if let Some(feature) = self.current_feature_mut() {

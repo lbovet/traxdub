@@ -1,11 +1,17 @@
 // Global menu stack to track nested menus
 let menuStack = [];
 let currentMenu = null;
+let savedGridFocus = null; // Save grid focus when opening first menu
 
 function showMenu(options, menuId = 'menu') {
     // If there's already a current menu, stack it first
     if (currentMenu) {
         currentMenu.stackOption();
+    } else {
+        // First menu being opened - save current grid focus
+        if (typeof grid !== 'undefined' && grid && grid.getFocusedElement) {
+            savedGridFocus = grid.getFocusedElement();
+        }
     }
 
     let selected = 0;
@@ -291,6 +297,18 @@ function showMenu(options, menuId = 'menu') {
 
         // Clear current menu reference
         currentMenu = null;
+        
+        // Restore grid focus if we saved one
+        if (savedGridFocus && typeof grid !== 'undefined' && grid) {
+            if (savedGridFocus.type === 'box') {
+                grid.focusBox(savedGridFocus.id);
+            } else if (savedGridFocus.type === 'line') {
+                const [fromId, toId] = savedGridFocus.id.split('-');
+                grid.focusLine(fromId, toId);
+            }
+            savedGridFocus = null;
+        }
+        
         return true;
     }
 

@@ -85,11 +85,11 @@ impl SystemFeature {
             options: vec![
                 MenuOption {
                     id: "type_audio".to_string(),
-                    label: "Audio".to_string(),
+                    label: "Audio >".to_string(),
                 },
                 MenuOption {
                     id: "type_midi".to_string(),
-                    label: "MIDI".to_string(),
+                    label: "MIDI >".to_string(),
                 },
             ],
         }
@@ -103,7 +103,7 @@ impl SystemFeature {
                 endpoints.iter().map(|endpoint| {
                     MenuOption {
                         id: format!("{}_{}", self.endpoint_type_name(), endpoint.name),
-                        label: endpoint.name.clone(),
+                        label: format!("{} >", endpoint.name),
                     }
                 }).collect()
             }
@@ -112,7 +112,7 @@ impl SystemFeature {
                 endpoints.iter().map(|endpoint| {
                     MenuOption {
                         id: format!("{}_{}", self.endpoint_type_name(), endpoint.name),
-                        label: endpoint.name.clone(),
+                        label: format!("{} >", endpoint.name),
                     }
                 }).collect()
             }
