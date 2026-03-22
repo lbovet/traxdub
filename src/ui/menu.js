@@ -235,7 +235,7 @@ function showMenu(options, menuId = 'menu') {
     function _close() {
         if (menuStack.length === 0) {
             return exit();
-        };
+        }
 
         // Get previous menu from stack
         const previousMenu = menuStack.pop();
@@ -277,7 +277,9 @@ function showMenu(options, menuId = 'menu') {
             _getSelected: () => menuOptions[selected],
             _close
         };
-
+        
+        // Return true to indicate there was a parent menu (don't clear currentMenu)
+        return true;
     }
 
     function exit() {
@@ -312,7 +314,8 @@ function showMenu(options, menuId = 'menu') {
             savedGridFocus = null;
         }
         
-        return true;
+        // Return false to indicate no parent menu (should clear currentMenu)
+        return false;
     }
 
     const menu = {

@@ -24,7 +24,6 @@ pub fn close() -> Result<()> {
 /// Create and run the UI window  
 pub fn run(
     message_queue: Arc<Mutex<VecDeque<String>>>,
-    menu_stack_size: Arc<Mutex<usize>>,
     focused_grid_element: Arc<Mutex<Option<GridElement>>>,
     focused_menu_option: Arc<Mutex<Option<MenuOptionElement>>>,
 ) -> Result<()> {
@@ -76,7 +75,6 @@ pub fn run(
         let webview_ipc = Arc::clone(&webview);
         
         let queue_clone = Arc::clone(&message_queue);
-        let menu_size_clone = Arc::clone(&menu_stack_size);
         let focused_grid_clone = Arc::clone(&focused_grid_element);
         let focused_menu_clone = Arc::clone(&focused_menu_option);
         
@@ -214,12 +212,6 @@ pub fn run(
                             }
                             "menu_closed" => {
                                 log::debug!("Menu closed");
-                            }
-                            "menu_stack_changed" => {
-                                if let Some(size) = message.get("data").and_then(|d| d.get("size")).and_then(|s| s.as_u64()) {
-                                    log::trace!("Menu stack size changed: {}", size);
-                                    *menu_size_clone.lock().unwrap() = size as usize;
-                                }
                             }
                             "focus_changed" => {
                                 if let Some(data) = message.get("data") {

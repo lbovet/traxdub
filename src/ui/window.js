@@ -250,8 +250,10 @@ function handleOpenMenu(data) {
 
 function handleCloseMenu() {
     if (currentMenu) {
+        // close() returns true if a parent menu was restored, false if all menus closed
         const hadParent = currentMenu.close();
         if (!hadParent) {
+            // No parent menu, all menus are now closed
             currentMenu = null;
         }
         window.ipc.postMessage(JSON.stringify({
@@ -265,10 +267,6 @@ function handleCloseAllMenus() {
         currentMenu.exit();
         currentMenu = null;
     }
-    window.ipc.postMessage(JSON.stringify({
-        type: 'menu_stack_changed',
-        data: { size: 0 }
-    }));
 }
 
 // ============================================================================

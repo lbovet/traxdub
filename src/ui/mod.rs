@@ -112,11 +112,6 @@ impl UI {
         Arc::clone(&self.message_queue)
     }
     
-    /// Get the menu stack size tracker for passing to window::run
-    pub fn get_menu_stack_size(&self) -> Arc<Mutex<usize>> {
-        Arc::clone(&self.menu_stack_size)
-    }
-    
     /// Get the focused grid element tracker for passing to window::run
     pub fn get_focused_grid_element(&self) -> Arc<Mutex<Option<GridElement>>> {
         Arc::clone(&self.focused_grid_element)
@@ -271,7 +266,7 @@ impl UI {
 
     /// Open a menu and push it onto the menu stack
     pub fn open_menu(&self, menu: Menu) -> Result<()> {
-        trace!("Opening menu: {}", menu.label);
+        debug!("Opening menu: {}", menu.label);
         
         let options: Vec<_> = menu.options.iter()
             .map(|opt| json!({
@@ -293,7 +288,7 @@ impl UI {
 
     /// Close the top-most menu
     pub fn close_menu(&self) -> Result<()> {
-        trace!("Closing menu");
+        debug!("Closing menu");
         
         let mut size = self.menu_stack_size.lock().unwrap();
         if *size > 0 {
@@ -309,11 +304,11 @@ impl UI {
         let size = *self.menu_stack_size.lock().unwrap();
         
         if size > 0 {
-            trace!("Going back (menu stack size: {})", size);
+            debug!("Going back (menu stack size: {})", size);
             self.close_menu()?;
             Ok(true)
         } else {
-            trace!("Back requested but no menu open");
+            debug!("Back requested but no menu open");
             Ok(false)
         }
     }
