@@ -1,8 +1,10 @@
 pub mod window;
 
-use anyhow::Result;
-use log::{debug};
-use std::sync::Mutex;
+use anyhow::{Result, Context};
+use log::{debug, trace};
+use serde_json::json;
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
 
 use crate::controller::{NavigationLevel, KnobDirection};
 
@@ -68,28 +70,89 @@ pub struct Link {
 /// UI module - Phase 1: Console-based interface
 pub struct UI {
     session_name: Mutex<Option<String>>, // Current session mnemonic
+    message_queue: Arc<Mutex<VecDeque<String>>>,
+    menu_stack_size: Arc<Mutex<usize>>,
 }
 
 impl UI {
     /// Create a new UI instance
     pub fn new() -> Self {
-        debug!("Initializing UI (console mode)...");
+        debug!("Initializing UI with IPC message queue...");
+        let message_queue = Arc::new(Mutex::new(VecDeque::new()));
+        let menu_stack_size = Arc::new(Mutex::new(0));
+        
         Self {
             session_name: Mutex::new(None),
+            message_queue,
+            menu_stack_size,
         }
+    }
+    
+    /// Get the message queue for passing to window::run
+    pub fn get_message_queue(&self) -> Arc<Mutex<VecDeque<String>>> {
+        Arc::clone(&self.message_queue)
+    }
+    
+    /// Get the menu stack size tracker for passing to window::run
+    pub fn get_menu_stack_size(&self) -> Arc<Mutex<usize>> {
+        Arc::clone(&self.menu_stack_size)
+    }
+
+    /// Send a command to the JavaScript UI
+    fn send_command(&self, msg_type: &str, data: serde_json::Value) -> Result<()> {
+        let message = json!({
+            "type": msg_type,
+            "data": data
+        });
+        let msg_str = serde_json::to_string(&message)
+            .context("Failed to serialize UI command")?;
+        
+        trace!("Queuing UI command: {}", msg_type);
+        self.message_queue
+            .lock()
+            .unwrap()
+            .push_back(msg_str);
+        Ok(())
     }
 
     /// Create a new node
     pub fn create_node(&self, id: String, name: String, node_type: NodeType) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        anyhow::ensure!(!id.is_empty(), "Node ID cannot be empty");
+        trace!("Creating node: {} ({})", name, id);
+        
+        let node_type_str = match node_type {
+            NodeType::Normal => "normal",
+            NodeType::PortIn => "portIn",
+            NodeType::PortOut => "portOut",
+            NodeType::Context => "context",
+        };
+        
+        self.send_command("create_node", json!({
+            "id": id,
+            "label": name,
+            "nodeType": node_type_str
+        }))
     }
 
 
     /// Create a link between two nodes
     pub fn create_link(&self, from_id: String, to_id: String, link_type: LinkType) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        anyhow::ensure!(!from_id.is_empty(), "From ID cannot be empty");
+        anyhow::ensure!(!to_id.is_empty(), "To ID cannot be empty");
+        trace!("Creating link: {} -> {}", from_id, to_id);
+        
+        let link_type_str = match link_type {
+            LinkType::Normal => "normal",
+            LinkType::PortIn => "portIn",
+            LinkType::PortOut => "portOut",
+            LinkType::Virtual => "virtual",
+        };
+        
+        self.send_command("create_link", json!({
+            "fromId": from_id,
+            "toId": to_id,
+            "linkType": link_type_str
+        }))
     }
 
     /// Insert a node between two nodes (connected by a link)
@@ -103,14 +166,45 @@ impl UI {
         link_from: String,
         link_to: String,
     ) -> Result<()> {
-        // TODO: implement        
-        Ok(())
+        anyhow::ensure!(!node_id.is_empty(), "Node ID cannot be empty");
+        anyhow::ensure!(!link_from.is_empty(), "Link from ID cannot be empty");
+        anyhow::ensure!(!link_to.is_empty(), "Link to ID cannot be empty");
+        trace!("Inserting node {} between {} and {}", node_name, link_from, link_to);
+        
+        let node_type_str = match node_type {
+            NodeType::Normal => "normal",
+            NodeType::PortIn => "portIn",
+            NodeType::PortOut => "portOut",
+            NodeType::Context => "context",
+        };
+        
+        self.send_command("insert_node", json!({
+            "id": node_id,
+            "label": node_name,
+            "nodeType": node_type_str,
+            "linkFrom": link_from,
+            "linkTo": link_to
+        }))
     }
 
     /// Handle navigation event
     pub fn navigate(&self, level: NavigationLevel, direction: KnobDirection) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Navigate: {:?} {:?}", level, direction);
+        
+        let level_str = match level {
+            NavigationLevel::Main => "main",
+            NavigationLevel::Secondary => "secondary",
+        };
+        
+        let direction_str = match direction {
+            KnobDirection::Forward => "forward",
+            KnobDirection::Backward => "backward",
+        };
+        
+        self.send_command("navigate", json!({
+            "level": level_str,
+            "direction": direction_str
+        }))
     }
 
 
@@ -122,63 +216,104 @@ impl UI {
         Ok(Some(element))
     }
 
-    /// Display a menu
-    fn display_menu(&self, menu: &Menu, focused_index: usize) {
-        // TODO: implement
-    }
-
     /// Open a menu and push it onto the menu stack
     pub fn open_menu(&self, menu: Menu) -> Result<()> {
-        // TODO: implement
+        trace!("Opening menu: {}", menu.label);
+        
+        let options: Vec<_> = menu.options.iter()
+            .map(|opt| json!({
+                "id": opt.id,
+                "label": opt.label
+            }))
+            .collect();
+        
+        self.send_command("open_menu", json!({
+            "id": menu.id,
+            "label": menu.label,
+            "options": options
+        }))?;
+        
+        // Increment menu stack size
+        *self.menu_stack_size.lock().unwrap() += 1;
         Ok(())
     }
 
     /// Close the top-most menu
     pub fn close_menu(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Closing menu");
+        
+        let mut size = self.menu_stack_size.lock().unwrap();
+        if *size > 0 {
+            *size -= 1;
+            self.send_command("close_menu", json!({}))
+        } else {
+            Ok(())
+        }
     }
 
     /// Back: Close the top-most menu and return to previous state
     pub fn back(&self) -> Result<bool> {
-        // TODO: implement
-        Ok(false) // Return true if we actually went back, false if there was no menu
+        let size = *self.menu_stack_size.lock().unwrap();
+        
+        if size > 0 {
+            trace!("Going back (menu stack size: {})", size);
+            self.close_menu()?;
+            Ok(true)
+        } else {
+            trace!("Back requested but no menu open");
+            Ok(false)
+        }
     }
 
     /// Close all open menus
     pub fn close_all_menus(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Closing all menus");
+        
+        *self.menu_stack_size.lock().unwrap() = 0;
+        self.send_command("close_all_menus", json!({}))
     }
 
     /// Get the current menu stack size
     pub fn menu_stack_size(&self) -> usize {
-        // TODO: implement
-        0
+        *self.menu_stack_size.lock().unwrap()
     }
 
     /// Prompt user to turn the main selection knob
     pub fn prompt_turn_selection_knob(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Prompt: turn selection knob");
+        self.send_command("prompt", json!({
+            "message": "Turn the main selection knob"
+        }))
     }
 
     /// Prompt user to turn the secondary knob
     pub fn prompt_turn_secondary_knob(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Prompt: turn secondary knob");
+        self.send_command("prompt", json!({
+            "message": "Turn the secondary knob"
+        }))
     }
 
     /// Prompt user to press the main selection button
     pub fn prompt_press_selection_button(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Prompt: press selection button");
+        self.send_command("prompt", json!({
+            "message": "Press the main selection button"
+        }))
     }
 
     /// Prompt user to press the main back button
     pub fn prompt_press_back_button(&self) -> Result<()> {
-        // TODO: implement
-        Ok(())
+        trace!("Prompt: press back button");
+        self.send_command("prompt", json!({
+            "message": "Press the main back button"
+        }))
+    }
+    
+    /// Commit pending visual changes
+    pub fn commit(&self) -> Result<()> {
+        trace!("Committing visual changes");
+        self.send_command("commit", json!({}))
     }
     
     /// Set the current session name (mnemonic)

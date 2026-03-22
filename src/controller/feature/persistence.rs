@@ -451,6 +451,9 @@ impl PersistenceFeature {
             }
         }
         
+        // Commit all graph changes at once
+        self.ui.commit()?;
+        
         Ok(())
     }
     

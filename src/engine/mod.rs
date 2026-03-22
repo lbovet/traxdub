@@ -242,7 +242,7 @@ impl Engine {
     
     /// Send a message to Ingen via the Unix socket
     fn send_message(&self, message: &str) -> Result<()> {
-        debug!("Sending message to Ingen: {}", message);
+        trace!("Sending message to Ingen: {}", message);
         
         // Drain any pending responses before sending new message
         self.drain_response()?;

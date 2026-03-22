@@ -62,7 +62,10 @@ fn main() -> Result<()> {
         });
         
         // Run the UI window on the main thread (required for most platforms)
-        let ui_result = ui::window::run(running.clone());
+        let ui_result = ui::window::run(
+            ui.get_message_queue(),
+            ui.get_menu_stack_size(),
+        );
 
         // Return the first error if any occurred
         ui_result

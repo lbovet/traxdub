@@ -106,6 +106,7 @@ impl Feature for PluginFeature {
             link_from.clone(),
             link_to.clone(),
         )?;
+        self.ui.commit()?; // Commit node insertion
         
         // Find the plugin in the engine's plugin list to get port information
         let plugins = self.engine.list_plugins();

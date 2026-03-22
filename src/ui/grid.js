@@ -227,9 +227,9 @@ function createGrid(svgElement) {
         if (boxes.has(id)) {
             // Update existing box
             const existing = boxes.get(id);
-            existing.box = box;
-            existing.row = row;
-            existing.col = col;
+            existing.box = box || existing.box;
+            existing.row = row || existing.row;
+            existing.col = col || existing.col;
 
             const text = existing.group.querySelector('text');
             const rect = existing.group.querySelector('rect');

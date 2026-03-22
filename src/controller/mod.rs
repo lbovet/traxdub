@@ -119,6 +119,7 @@ impl Controller {
         controller.ui.create_node("outputs".to_string(), "Outputs".to_string(), crate::ui::NodeType::Context)?;
         // Context -> Context => Virtual
         controller.ui.create_link("inputs".to_string(), "outputs".to_string(), crate::ui::LinkType::Virtual)?;
+        controller.ui.commit()?; // Commit initial graph setup
         
         // Initialize persistence feature with auto-load flag
         let auto_load = !new_session; // auto_load is opposite of new_session

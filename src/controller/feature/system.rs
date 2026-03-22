@@ -355,6 +355,7 @@ impl Feature for SystemFeature {
                         link_from.clone(),
                         link_to.clone(),
                     )?;
+                    self.ui.commit()?; // Commit system port insertion
                     
                     // Create connections in the engine (skip "inputs" and "outputs" context nodes)
                     if link_from != "inputs" {

@@ -1,5 +1,6 @@
 use anyhow::Result;
-use std::sync::{Arc, OnceLock, atomic::{AtomicBool, Ordering}};
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex, OnceLock, atomic::{AtomicBool, Ordering}};
 use tao::event_loop::EventLoopProxy;
 
 #[derive(Debug, Clone)]
@@ -8,6 +9,7 @@ pub enum UserEvent {
 }
 
 static PROXY: OnceLock<EventLoopProxy<UserEvent>> = OnceLock::new();
+static RUNNING: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 
 pub fn close() -> Result<()> {
     if let Some(proxy) = PROXY.get() {
@@ -18,7 +20,12 @@ pub fn close() -> Result<()> {
 }
 
 /// Create and run the UI window  
-pub fn run(running: Arc<AtomicBool>) -> Result<()> {
+pub fn run(
+    message_queue: Arc<Mutex<VecDeque<String>>>,
+    menu_stack_size: Arc<Mutex<usize>>,
+) -> Result<()> {
+    let running = Arc::new(AtomicBool::new(true));
+    let _ = RUNNING.set(Arc::clone(&running));
     use wry::{
         dpi::LogicalSize,
         WebViewBuilder,
@@ -40,6 +47,7 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
 
     let window_html = include_str!("window.html").to_string();
     let window_js = include_str!("window.js").to_string();
+    let console_js = include_str!("console.js").to_string();
     let css = include_str!("style.css").to_string();
     let logo = include_str!("logo.svg").to_string();
     let logo_js = include_str!("logo.js").to_string();
@@ -61,7 +69,10 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
         use wry::WebViewBuilderExtUnix;
         
         let webview: Arc<std::sync::Mutex<Option<wry::WebView>>> = Arc::new(std::sync::Mutex::new(None));
-        let webview_clone = Arc::clone(&webview);
+        let webview_ipc = Arc::clone(&webview);
+        
+        let queue_clone = Arc::clone(&message_queue);
+        let menu_size_clone = Arc::clone(&menu_stack_size);
         
         let builder = WebViewBuilder::new()
             .with_url("app://local/index.html")
@@ -70,54 +81,76 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
             .with_custom_protocol("app".into(), move |_webview_id, request| {
                 use std::borrow::Cow;
                 
-                log::debug!("Custom protocol request: {}", request.uri());
+                let path = request.uri().path();
                 
-                if request.uri().path() == "/style.css" {
+                // Don't log the high-frequency message polling requests
+                if path != "/messages" {
+                    log::debug!("Custom protocol request: {}", request.uri());
+                }
+                
+                if path == "/messages" {
+                    // Poll endpoint for JavaScript to fetch pending messages
+                    let mut queue = queue_clone.lock().unwrap();
+                    let messages: Vec<String> = queue.drain(..).collect();
+                    let json = serde_json::to_string(&messages).unwrap_or_else(|_| "[]".to_string());
+                    
+                    log::trace!("Sending {} messages to UI", messages.len());
+                    
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/json")
+                        .body(Cow::from(json.into_bytes()))
+                        .unwrap()
+                } else if path == "/style.css" {
                     wry::http::Response::builder()
                         .header("Content-Type", "text/css")
                         .body(Cow::from(css.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/index.html" {
+                } else if path == "/index.html" {
                     wry::http::Response::builder()
                         .header("Content-Type", "text/html")
                         .body(Cow::from(window_html.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/window.js" {
+                } else if path == "/window.js" {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(window_js.clone().into_bytes()))
-                        .unwrap()   
-                } else if request.uri().path() == "/logo.svg" {
+                        .unwrap()
+                } else if path == "/console.js" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/javascript")
+                        .body(Cow::from(console_js.clone().into_bytes()))
+                        .unwrap()
+                } else if path == "/logo.svg" {
                     wry::http::Response::builder()
                         .header("Content-Type", "image/svg+xml")
                         .body(Cow::from(logo.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/logo.js" {
+                } else if path == "/logo.js" {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(logo_js.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/menu.js" {
+                } else if path == "/menu.js" {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(menu_js.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/grid.js" {
+                } else if path == "/grid.js" {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(grid_js.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/rotary.js" {
+                } else if path == "/rotary.js" {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(rotary_js.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/control.js" {
+                } else if path == "/control.js" {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(control_js.clone().into_bytes()))
                         .unwrap()
-                } else if request.uri().path() == "/oxanium.ttf" {
+                } else if path == "/oxanium.ttf" {
                     // Include font file
                     let font_data = include_bytes!("oxanium.ttf");
                     wry::http::Response::builder()
@@ -131,10 +164,74 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
                         .unwrap()
                 }
             })
-            .with_ipc_handler(move |_req| {
-                if let Ok(wv) = webview_clone.lock() {
-                    if let Some(wv) = wv.as_ref() {
-                        let _ = wv.set_visible(true);
+            .with_ipc_handler(move |req| {
+                log::trace!("IPC message received: {}", req.body());
+                
+                // Parse the message from JavaScript
+                if let Ok(message) = serde_json::from_str::<serde_json::Value>(req.body()) {
+                    if let Some(msg_type) = message.get("type").and_then(|v| v.as_str()) {
+                        match msg_type {
+                            "console_log" => {
+                                if let Some(msg) = message.get("data").and_then(|d| d.get("message")).and_then(|m| m.as_str()) {
+                                    log::debug!("[JS] {}", msg);
+                                }
+                            }
+                            "console_warn" => {
+                                if let Some(msg) = message.get("data").and_then(|d| d.get("message")).and_then(|m| m.as_str()) {
+                                    log::warn!("[JS] {}", msg);
+                                }
+                            }
+                            "console_error" => {
+                                if let Some(msg) = message.get("data").and_then(|d| d.get("message")).and_then(|m| m.as_str()) {
+                                    log::error!("[JS] {}", msg);
+                                }
+                            }
+                            "page_loaded" => {
+                                log::info!("UI page loaded, making WebView visible");
+                                if let Ok(wv) = webview_ipc.lock() {
+                                    if let Some(wv) = wv.as_ref() {
+                                        let _ = wv.set_visible(true);
+                                    }
+                                }
+                            }
+                            "menu_selected" => {
+                                if let Some(data) = message.get("data") {
+                                    log::debug!("Menu option selected: {:?}", data);
+                                    // Controller will handle this via select() return value
+                                }
+                            }
+                            "element_selected" => {
+                                if let Some(data) = message.get("data") {
+                                    log::debug!("Grid element selected: {:?}", data);
+                                    // Controller will handle this via select() return value
+                                }
+                            }
+                            "menu_closed" => {
+                                log::debug!("Menu closed");
+                            }
+                            "menu_stack_changed" => {
+                                if let Some(size) = message.get("data").and_then(|d| d.get("size")).and_then(|s| s.as_u64()) {
+                                    log::trace!("Menu stack size changed: {}", size);
+                                    *menu_size_clone.lock().unwrap() = size as usize;
+                                }
+                            }
+                            "error" => {
+                                if let Some(error) = message.get("data") {
+                                    log::error!("JavaScript error: {:?}", error);
+                                }
+                            }
+                            _ => {
+                                log::warn!("Unknown IPC message type: {}", msg_type);
+                            }
+                        }
+                    }
+                } else {
+                    // Legacy handling for simple string messages
+                    log::debug!("Legacy IPC message: {}", req.body());
+                    if let Ok(wv) = webview_ipc.lock() {
+                        if let Some(wv) = wv.as_ref() {
+                            let _ = wv.set_visible(true);
+                        }
                     }
                 }
             });
