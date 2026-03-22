@@ -38,11 +38,15 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
         .with_inner_size(LogicalSize::new(800.0, 600.0))
         .build(&event_loop)?;
 
-    let html = include_str!("window.html").to_string();
+    let window_html = include_str!("window.html").to_string();
+    let window_js = include_str!("window.js").to_string();
     let css = include_str!("style.css").to_string();
     let logo = include_str!("logo.svg").to_string();
     let logo_js = include_str!("logo.js").to_string();
     let menu_js = include_str!("menu.js").to_string();
+    let grid_js = include_str!("grid.js").to_string();
+    let rotary_js = include_str!("rotary.js").to_string();
+    let control_js = include_str!("control.js").to_string();
 
     let window = Arc::new(window);    
 
@@ -76,8 +80,13 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
                 } else if request.uri().path() == "/index.html" {
                     wry::http::Response::builder()
                         .header("Content-Type", "text/html")
-                        .body(Cow::from(html.clone().into_bytes()))
+                        .body(Cow::from(window_html.clone().into_bytes()))
                         .unwrap()
+                } else if request.uri().path() == "/window.js" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/javascript")
+                        .body(Cow::from(window_js.clone().into_bytes()))
+                        .unwrap()   
                 } else if request.uri().path() == "/logo.svg" {
                     wry::http::Response::builder()
                         .header("Content-Type", "image/svg+xml")
@@ -92,6 +101,21 @@ pub fn run(running: Arc<AtomicBool>) -> Result<()> {
                     wry::http::Response::builder()
                         .header("Content-Type", "application/javascript")
                         .body(Cow::from(menu_js.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/grid.js" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/javascript")
+                        .body(Cow::from(grid_js.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/rotary.js" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/javascript")
+                        .body(Cow::from(rotary_js.clone().into_bytes()))
+                        .unwrap()
+                } else if request.uri().path() == "/control.js" {
+                    wry::http::Response::builder()
+                        .header("Content-Type", "application/javascript")
+                        .body(Cow::from(control_js.clone().into_bytes()))
                         .unwrap()
                 } else if request.uri().path() == "/oxanium.ttf" {
                     // Include font file
